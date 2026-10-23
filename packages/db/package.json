@@ -1,0 +1,16 @@
+{
+  "name": "@team-crm/db",
+  "version": "1.0.0",
+  "main": "src/db.js",
+  "type": "module",
+  "scripts": {
+    "db:generate": "prisma generate --schema prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@prisma/client": "^7.10.0",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "prisma": "^7.10.0"
+  }
+}

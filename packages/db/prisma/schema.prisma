@@ -1,0 +1,146 @@
+datasource db {
+    provider = "postgresql"
+}
+
+generator client {
+    provider = "prisma-client-js"
+}
+
+
+enum Role {
+    ADMIN 
+    WAREHOUSE
+    ACCOUNTS
+    SALES
+}
+
+enum   leadStatus{   
+    DECLINED
+    COMPLETED
+    PENDING
+}
+
+enum orderStatus {
+    PLACED 
+    DELIVERED
+    PROCESS
+}
+
+enum reqStatus {
+    REQUESTED
+    REJECTED
+    APPROVED
+}
+
+model User {
+    id Int @id @default(autoincrement())
+    name String 
+    email String @unique
+    password String 
+    role Role  
+    leads Lead[]
+    orders Order[]
+    expenses Expenses[]
+    request Request[]
+    wallet Wallet?
+    message Message[]
+    group GroupMember[]
+}
+
+model Lead {
+    id String @id
+    name String 
+    phone String @unique @db.VarChar(10)
+    status leadStatus @default(PENDING)
+    salesId Int 
+    sales  User @relation(fields : [salesId] , references : [id])
+    orders Order[]
+}
+ 
+model Product {
+    id String @id
+    name String 
+    price Int @default(0)
+    stock Int
+    orderItems OrderItem[]
+    requestId Int?
+    request Request? @relation( fields : [requestId] , references : [id])
+}
+
+model Order {
+    id String @id
+    status orderStatus @default(PLACED)
+    total Decimal 
+    createdAt DateTime @default(now())
+    salesId Int
+    sales User @relation(fields : [salesId] , references : [id])
+    leadId String
+    lead Lead @relation(fields : [leadId] , references : [id])
+    orderItems OrderItem[]
+}
+ 
+ model OrderItem {
+    id String @id 
+    quantity Int @default(1)
+    price Int 
+    orderId String 
+    productId String 
+    product Product @relation (fields : [productId] , references : [id])
+    order Order @relation(fields : [orderId] , references : [id] )
+ }
+
+model Expenses {
+    id String @id 
+    amount Int
+    note String?
+    userId Int
+    user User @relation(fields: [userId] , references : [id]) 
+}
+
+model Wallet {
+  id        Int      @id @default(autoincrement())
+  balance   Int      @default(0) 
+  userId    Int      @unique
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Request {
+    id Int @id @default(autoincrement())
+    amount Int 
+    note String?
+    status reqStatus @default(REQUESTED)
+    userId Int
+    user User @relation(fields: [userId] , references : [id]) 
+    products Product[]
+}
+
+model Message{
+    id String @id @default(uuid())
+    text String 
+    createdAt DateTime @default(now())
+    userId Int 
+    user User @relation(fields : [userId] , references : [id], onDelete: Cascade)
+    roomId String
+    room Room @relation(fields : [roomId] , references : [id] , onDelete: Cascade )
+}
+
+model Room {
+    id String @id @default(uuid())
+    name String 
+    createdAt DateTime @default(now())
+    message Message[]
+    member GroupMember[]
+}
+
+model GroupMember {
+    id       String   @id @default(uuid())
+    roomId   String
+    userId   Int
+    isAdmin  Boolean  @default(false) 
+    joinedAt DateTime @default(now())
+
+    room     Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+    user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@unique([roomId, userId]) 
+}
