@@ -1,101 +1,117 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { registerUser } from './authApi';
+import { useState } from "react";
+import { Link, useNavigate } from "react-router";
+import { registerUser } from "./authApi";
 
-export default function RegisterForm() 
-{
+export default function RegisterForm() {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({ email: '', password: '', name: '', role: 'SALES' });
-  const [error, setError] = useState('');
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+    name: "",
+    role: "SALES",
+  });
+  const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
+  function handleChange(event) {
+    setFormData((current) => ({
+      ...current,
+      [event.target.name]: event.target.value,
+    }));
+  }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
+  function getErrorMessage(value) {
+    return typeof value === "string"
+      ? value
+      : value?.message || "Unable to create your account.";
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError("");
     setIsLoading(true);
-
     try {
       await registerUser(formData);
-      navigate('/dashboard');
-    } catch (err) {
-      setError(err);
+      navigate("/signin");
+    } catch (registerError) {
+      setError(getErrorMessage(registerError));
     } finally {
       setIsLoading(false);
     }
-  };
+  }
 
   return (
     <div className="login-form-container">
-      <h2>Create Your Account</h2>
-      {error && <p className="error-banner">{error}</p>}
-
-      <form onSubmit={handleSubmit}>
+      <h2>Create account</h2>
+      {error && (
+        <p className="error-banner" role="alert">
+          {error}
+        </p>
+      )}
+      <form className="auth-form" onSubmit={handleSubmit}>
         <div className="input-group">
-          <label>Full Name</label>
+          <label htmlFor="register-name">Full name</label>
           <input
-            type="text"
+            autoComplete="name"
+            disabled={isLoading}
+            id="register-name"
             name="name"
+            onChange={handleChange}
+            required
             value={formData.name}
-            onChange={handleChange}
-            required
-            disabled={isLoading}
-            placeholder="John Doe"
           />
         </div>
-
         <div className="input-group">
-          <label>Email Address</label>
+          <label htmlFor="register-email">Email</label>
           <input
-            type="email"
+            autoComplete="email"
+            disabled={isLoading}
+            id="register-email"
             name="email"
+            onChange={handleChange}
+            required
+            type="email"
             value={formData.email}
-            onChange={handleChange}
-            required
-            disabled={isLoading}
-            placeholder="name@company.com"
           />
         </div>
-
         <div className="input-group">
-          <label>Password</label>
+          <label htmlFor="register-password">Password</label>
           <input
-            type="password"
+            autoComplete="new-password"
+            disabled={isLoading}
+            id="register-password"
             name="password"
-            value={formData.password}
             onChange={handleChange}
             required
-            disabled={isLoading}
-            placeholder="••••••••"
+            type="password"
+            value={formData.password}
           />
         </div>
-
         <div className="input-group">
-          <label>Role</label>
-          <select 
-            name="role" 
-            value={formData.role} 
-            onChange={handleChange} 
+          <label htmlFor="register-role">Role</label>
+          <select
             disabled={isLoading}
-            style={{ width: '100%', padding: '0.75rem', borderRadius: '0.375rem', border: '1px solid #d1d5db', backgroundColor: '#fff' }}
+            id="register-role"
+            name="role"
+            onChange={handleChange}
+            value={formData.role}
           >
             <option value="SALES">Sales</option>
             <option value="WAREHOUSE">Warehouse</option>
             <option value="ACCOUNTS">Accounts</option>
           </select>
         </div>
-
-        <button type="submit" disabled={isLoading}>
-          {isLoading ? 'Creating Account...' : 'Sign Up'}
+        <button
+          className="button button-primary auth-submit"
+          disabled={isLoading}
+          type="submit"
+        >
+          {isLoading ? "Creating account…" : "Create account"}
         </button>
       </form>
-      
-      <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-        <p>Already have an account? <Link to="/auth/login" style={{ color: '#4f46e5', fontWeight: '600', textDecoration: 'none' }}>Sign In</Link></p>
-      </div>
+      <p className="auth-switch">
+        Already registered? <Link to="/signin">Sign in</Link>
+      </p>
     </div>
   );
 }

@@ -16,7 +16,9 @@
     "db:migrate": "prisma migrate dev --schema=packages/db/prisma/schema.prisma",
     "db:diff": "prisma db diff --from-schema-datamodel packages/db/prisma/schema.prisma --to-schema-datasource packages/db/prisma/schema.prisma --script",
     "db:push": "prisma db push --schema=packages/db/prisma/schema.prisma",
-    "socket:api": "npm run socket -w @team-crm/api"
+    "socket:api": "npm run socket -w @team-crm/api",
+    "dev" : "concurrently \"npm run dev:api\"  \"npm run dev:web\"",
+    "db" : "concurrently \"npm run db:generate\" \"npm run db:push\" \"npm run db:migrate\" "
   },
   "dependencies": {
     "@prisma/client": "^7.10.0",
@@ -25,6 +27,7 @@
     "pg": "^8.23.1"
   },
   "devDependencies": {
+    "concurrently": "^10.0.6",
     "prisma": "^7.10.0",
     "prisma-json-schema-generator": "^5.1.5",
     "swagger-autogen": "^2.23.7",

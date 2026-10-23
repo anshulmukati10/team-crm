@@ -1,34 +1,46 @@
-import  { useState } from 'react';
+import { useState } from "react";
+import { Icon } from "../../components/ui/Navbar";
 
-export default function SendMessage({ roomId, socket }) {
-    const [text, setText] = useState('');
+export default function MessageInput({ onSend, disabled = false }) {
+  const [message, setMessage] = useState("");
 
-    const handleFormSubmit = (e) => {
-        e.preventDefault();
-        if (!text.trim() || !socket) return;
+  function submit(event) {
+    event.preventDefault();
+    const text = message.trim();
+    if (!text) return;
+    onSend(text);
+    setMessage("");
+  }
 
-        socket.emit('send_message', {
-            text: text.trim(),
-            roomId: roomId
-        });
-        setText('');
-    };
-    
-    return (
-        <form onSubmit={handleFormSubmit} className="p-3 bg-white border-t border-gray-100 flex gap-2 items-center">
-            <input 
-                type="text"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="Type your message securely..."
-                className="flex-1 px-4 py-2 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm placeholder-gray-400"
-            />
-            <button 
-                type="submit"
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm rounded-xl transition shadow-xs flex items-center justify-center"
-            >
-                Send
-            </button>
-        </form>
-    );
+  return (
+    <>
+      <form className="chat-compose" onSubmit={submit}>
+        <textarea
+          aria-label="Write a message"
+          disabled={disabled}
+          onChange={(event) => setMessage(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              event.currentTarget.form.requestSubmit();
+            }
+          }}
+          placeholder="Message the team..."
+          rows="1"
+          value={message}
+        />
+        <button
+          aria-label="Send message"
+          className="send-button"
+          disabled={disabled || !message.trim()}
+          type="submit"
+        >
+          <Icon name="arrow" size={18} />
+        </button>
+      </form>
+      <p className="chat-hint">
+        Press Enter to send, Shift + Enter for a new line
+      </p>
+    </>
+  );
 }

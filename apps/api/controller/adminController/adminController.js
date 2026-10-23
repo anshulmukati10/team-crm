@@ -1,5 +1,6 @@
 import asyncHandler from "../../middleware/asyncMiddleware.js";
 import { prisma } from "../../config/prismaClient.js";
+import { emitWorkspaceUpdate } from "../../config/socket.js";
 
 
 
@@ -22,6 +23,7 @@ export const createProduct = asyncHandler(async (req, res) => {
                 stock: stock
             }
         })
+        emitWorkspaceUpdate()
         return res.status(201).json({ message: " product created " })
     }
     catch (error) {
@@ -46,6 +48,7 @@ export const deleteProduct = asyncHandler(async (req, res) => {
             return res.status(409).json({ message: " product does not exist " })
         }
         await prisma.product.delete({ where: { id: id } })
+        emitWorkspaceUpdate()
         return res.status(200).json({ message: "product deleted " })
     }
     catch (error) {
@@ -79,6 +82,7 @@ export const updateProduct = asyncHandler(async (req, res) => {
                 stock: stock !== undefined ? stock : productExist.stock
             }
         })
+        emitWorkspaceUpdate()
         return res.status(200).json({ message: " update successfull " })
 
     } catch (error) {
@@ -104,6 +108,7 @@ export const deleteLead = asyncHandler(async (req, res) => {
 
 
         await prisma.lead.delete({ where: { id: id } })
+        emitWorkspaceUpdate()
         return res.status(200).json({ message: "lead deleted" })
     }
     catch (error) {
@@ -123,7 +128,7 @@ export const createLead = asyncHandler(async (req, res) => {
         if (leadExist) {
             return res.status(409).json({ message: "lead already exist" })
         }
-        
+
         const leadId = 'LEAD_' + String(Date.now())
         await prisma.lead.create(
             {
@@ -136,6 +141,7 @@ export const createLead = asyncHandler(async (req, res) => {
 
                 }
             })
+        emitWorkspaceUpdate()
         return res.status(201).json({ message: " lead created " })
     }
     catch (err) {
@@ -152,6 +158,7 @@ export const getLeads = asyncHandler(async (req, res) => {
             select: {
                 id: true,
                 name: true,
+                phone: true,
                 status: true,
             }
         })
@@ -244,6 +251,7 @@ export const handleRequest = asyncHandler(async (req, res) => {
                     }
                 }
             })
+            emitWorkspaceUpdate()
             return res.status(201).json({ message: `APPROVED` })
         }
         if (balance < request.amount) {
@@ -255,6 +263,7 @@ export const handleRequest = asyncHandler(async (req, res) => {
                     status: "REJECTED"
                 }
             });
+            emitWorkspaceUpdate()
             return res.status(201).json({ message: `REJECTED` })
         }
     }
@@ -285,6 +294,7 @@ export const creditAmount = asyncHandler(async (req, res) => {
             update: { balance: { increment: amount } },
             create: { userId: numericId, balance: amount }
         })
+        emitWorkspaceUpdate()
         return res.status(201).json({ message: ` transaction done by ${user.name} of $ ${amount}` })
     } catch (error) {
         console.log(error)
@@ -311,7 +321,7 @@ export const createRoom = asyncHandler(async (req, res) => {
             data:
             {
                 name: groupName,
-                
+
             },
         })
 
@@ -322,8 +332,12 @@ export const createRoom = asyncHandler(async (req, res) => {
         }))
         ]
 
-        await prisma.groupMember.createMany({ data: membersToAdd  , skipDuplicates : true })
-        res.status(201).json(room)
+        await prisma.groupMember.createMany({ data: membersToAdd, skipDuplicates: true })
+        emitWorkspaceUpdate()
+        res.status(201).json({
+            ...room,
+            memberIds: membersToAdd.map(({ userId }) => userId)
+        })
     } catch (error) {
         console.error(error)
         return res.status(500).json({ message: " Internal Server Error in Creating Room " })
@@ -336,15 +350,16 @@ export const removeMember = asyncHandler(async (req, res) => {
         if (!roomId || !memberId) {
             return res.status(400).json({ message: "roomId and memberId are required" })
         }
-        
+
         const room = await prisma.room.findUnique({ where: { id: roomId } })
         if (!room) {
             return res.status(404).json({ message: "Room not found" })
         }
 
+        // 1. Changed userId_roomId to roomId_userId
         const membership = await prisma.groupMember.findUnique({
             where: {
-                userId_roomId: {
+                roomId_userId: {
                     userId: Number(memberId),
                     roomId: roomId
                 }
@@ -354,21 +369,26 @@ export const removeMember = asyncHandler(async (req, res) => {
             return res.status(404).json({ message: "Member not found in room" })
         }
 
+        // 2. Changed userId_roomId to roomId_userId here as well
         await prisma.groupMember.delete({
             where: {
-                userId_roomId:
-                {
+                roomId_userId: {
                     userId: Number(memberId),
                     roomId: roomId
                 }
             }
         })
+        emitWorkspaceUpdate()
         return res.status(200).json({ message: "member removed from group" })
     } catch (error) {
         console.log(error)
         return res.status(500).json({ message: " Internal Server Error in Removing Member " })
     }
 })
+
+
+
+
 export const getAllUsers = asyncHandler(async (req, res) => {
     try {
         const users = await prisma.user.findMany({
@@ -378,11 +398,11 @@ export const getAllUsers = asyncHandler(async (req, res) => {
                 email: true,
                 role: true
             },
-            where :
+            where:
             {
-                role :
+                role:
                 {
-                    not : 'ADMIN'
+                    not: 'ADMIN'
                 }
             }
         })
@@ -394,3 +414,47 @@ export const getAllUsers = asyncHandler(async (req, res) => {
 })
 
 
+export const getBalance = asyncHandler(async (req, res) => {
+    try {
+        const id = Number.parseInt(req.user.id)
+        if (!id) return res.status(401).json({ message: " required id " })
+        const amount = await prisma.wallet.findUnique({
+            select:
+            {
+                balance: true,
+            },
+            where: {
+                userId: id
+            }
+        })
+     return res.json(amount)
+    } catch (error) {
+        console.log(error)
+        return res.status(500).json({ message: "Internal Server error i fetching balance " })
+    }
+
+})
+
+
+export const deleteRooms = asyncHandler(
+    async (req , res ) => {
+        try {
+            const { rooms }=  req.body
+            if (!rooms && Array.isArray(rooms) && rooms.length === 0){
+              return res.status(401).json({message : " rooms is missing "})
+              
+            }
+            await prisma.room.deleteMany( { where :
+                {id :
+                 {
+                    in : rooms
+                 }
+                }
+            })
+            return res.status(200).json({message : "successful "})
+        } catch (error) {
+            console.log(error)
+            return res.status(500).json({message : " internal server error at deleting room "})
+        }
+    }
+)

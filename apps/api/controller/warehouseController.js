@@ -1,5 +1,6 @@
 import { prisma } from "../config/prismaClient.js";
 import asyncHandler from "../middleware/asyncMiddleware.js";
+import { emitWorkspaceUpdate } from "../config/socket.js";
 
 
     /* #swagger.tags = ['Warehouse'] */
@@ -94,11 +95,12 @@ export const exportOrder = asyncHandler(async (req, res) => {
                 userId: order.salesId
             }
         })
-        await prisma.wallet.update({data : {
-            balance : {
-             increment : order.total ,
-            }
-        }})
+        await prisma.wallet.upsert({
+            where: { userId: order.salesId },
+            update: { balance: { increment: order.total } },
+            create: { userId: order.salesId, balance: order.total }
+        })
+        emitWorkspaceUpdate()
         
         return res.status(200).json({ message: ` order status ${order.status}` })
     } catch (error) {
@@ -154,6 +156,7 @@ export const createImportOrderRequest = asyncHandler(async (req, res) => {
                 }
             }
         })
+        emitWorkspaceUpdate()
         res.status(201).json({ message: "Request created for importing stock " })
     }
     catch (error) {

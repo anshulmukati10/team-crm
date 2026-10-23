@@ -2,9 +2,10 @@ import genToken from '../config/token.js'
 import asyncHandler from '../middleware/asyncMiddleware.js'
 import { prisma } from '../config/prismaClient.js';
 import bcrypt from 'bcrypt'
+import { emitWorkspaceUpdate } from '../config/socket.js'
 
 
-    /* #swagger.tags = ['Authentication'] */
+/* #swagger.tags = ['Authentication'] */
 
 export const createUSer = asyncHandler(async (req, res) => {
     try {
@@ -35,6 +36,7 @@ export const createUSer = asyncHandler(async (req, res) => {
                     password: true
                 }
             })
+        emitWorkspaceUpdate()
         return res.status(201).json({ message: " user created " })
 
     }
@@ -67,7 +69,7 @@ export const loginUser = asyncHandler(async (req, res) => {
             maxAge: 30 * 24 * 60 * 60 * 1000
         });
         res.json({
-            userId : User.id,
+            userId: User.id,
             userName: User.name,
             userEmail: User.email,
             userRole: User.role
@@ -81,42 +83,38 @@ export const loginUser = asyncHandler(async (req, res) => {
 
 
 
-export const  logoutUser = asyncHandler ( async(req , res) => 
-{
+export const logoutUser = asyncHandler(async (req, res) => {
     try {
-        res.cookie('token' , '' , {
-            httpOnly : true ,
-            maxAge : new Date(0)
+        res.cookie('token', '', {
+            httpOnly: true,
+            maxAge: new Date(0)
         })
-        return res.status(200).json({message : " user logged out "})
+        return res.status(200).json({ message: " user logged out " })
     } catch (error) {
-        return res.status(500).json({message : " problem in logging out user "})
+        return res.status(500).json({ message: " problem in logging out user " })
     }
 })
 
 
-export const deleteUser = asyncHandler(async(req,res) =>
-{
-    try 
-    {
-        const  id  = req.query.id ;
-        if (!id){
-            return res.status(401).json({message : " id required "})
+export const deleteUser = asyncHandler(async (req, res) => {
+    try {
+        const id = req.query.id;
+        if (!id) {
+            return res.status(401).json({ message: " id required " })
         }
         const numericId = Number(id)
-        const isAdmin = await prisma.user.findUnique({where : { id : numericId}})
-        if(isAdmin.role === "ADMIN")
-        {
-            return res.status(404).json({message : "admin can't be deleted "})
+        const isAdmin = await prisma.user.findUnique({ where: { id: numericId } })
+        if (isAdmin.role === "ADMIN") {
+            return res.status(404).json({ message: "admin can't be deleted " })
         }
 
-        console.log("id " + numericId )
-        await prisma.user.delete({where : { id : numericId }})
-        return res.status(200).json({message : "user deleted"})
-    } 
-    catch (error) 
-    {
-        return res.status(500).json({message : "server errored at deleting user "})
+        console.log("id " + numericId)
+        await prisma.user.delete({ where: { id: numericId } })
+        emitWorkspaceUpdate()
+        return res.status(200).json({ message: "user deleted" })
+    }
+    catch (error) {
+        return res.status(500).json({ message: "server errored at deleting user " })
     }
 })
 
@@ -126,8 +124,7 @@ export const deleteUser = asyncHandler(async(req,res) =>
 // })
 
 
-export const getProfile = asyncHandler(async(req,res) =>
-{
+export const getProfile = asyncHandler(async (req, res) => {
     try {
         const userId = req.user.id;
         const numericUserId = Number(userId);
@@ -151,15 +148,19 @@ export const updateProfile = asyncHandler(async (req, res) => {
     try {
         const userId = req.user.id;
         const numericUserId = Number(userId);
-        const { name, email, password } = req.body; 
+        const { name, email, password } = req.body;
         const user = await prisma.user.findUnique({ where: { id: numericUserId } });
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
-        const updatedUser = await prisma.user.update({ where : { id: numericUserId }, data: { 
-            name : ( name == undefined ?  user.name : name ), 
-            email : ( email == undefined ?  user.email : email ), 
-            password : ( password == undefined ?  user.password : password ) } });
+        const updatedUser = await prisma.user.update({
+            where: { id: numericUserId }, data: {
+                name: (name == undefined ? user.name : name),
+                email: (email == undefined ? user.email : email),
+                password: (password == undefined ? user.password : password)
+            }
+        });
+        emitWorkspaceUpdate()
         res.json({
             id: updatedUser.id,
             name: updatedUser.name,
@@ -171,7 +172,7 @@ export const updateProfile = asyncHandler(async (req, res) => {
     }
 });
 
-export const socketConnection = asyncHandler(async ( req , res ) => {
+export const socketConnection = asyncHandler(async (req, res) => {
     const roomId = req.params.id;
     try {
         const room = await prisma.room.findUnique({ where: { id: roomId } });
@@ -179,25 +180,64 @@ export const socketConnection = asyncHandler(async ( req , res ) => {
 
         const member = await prisma.groupMember.findUnique({
             where: {
-                userId_roomId: {
+                roomId_userId: {
                     userId: Number(req.user.id),
-                    roomId
+                    roomId : roomId
                 }
             }
         });
         if (!member) return res.status(403).json({ message: "You are not a member of this room" });
 
-        const messages  = await prisma.message.findMany({
-            where :{roomId : roomId},
-            include : { user: {
-                name : true ,
-                role : true
-            } },
-            orderBy : { createdAt : 'asc'}
+        const messages = await prisma.message.findMany({
+            where: { roomId: roomId },
+            include: {
+                user: {
+                 select :    {name: true,
+                    role: true}
+                }
+            },
+            orderBy: { createdAt: 'asc' }
         })
         res.json(messages)
     } catch (error) {
         console.error(` Error : ${error}`)
-        return res.status(500).json({message :  " can not fetch chat "})
+        return res.status(500).json({ message: " can not fetch chat " })
+    }
+})
+
+
+
+export const getRooms = asyncHandler(async (req, res) => {
+    try {
+        const userId = Number(req.user.id)
+        if (!Number.isInteger(userId)) {
+            return res.status(401).json({ message: "User not found" })
+        }
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true }
+        })
+        if (!user) return res.status(401).json({ message: "User not found" })
+
+        const rooms = await prisma.room.findMany({
+            where: { member: { some: { userId: user.id } } },
+            select: {
+                id: true,
+                name: true,
+                createdAt: true,
+                member: { select: { userId: true } }
+            }
+        });
+
+        return res.status(200).json({
+            success: true,
+            rooms: rooms.map(({ member, ...room }) => ({
+                ...room,
+                memberIds: member.map(({ userId }) => userId)
+            }))
+        });
+    } catch (error) {
+        console.error(error)
+        return res.status(500).json({ message: "Error in fetching rooms" })
     }
 })

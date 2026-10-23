@@ -7,24 +7,21 @@ export const getBalance = asyncHandler(async(req , res ) =>
 {
     try 
     {
-        const { id } = req.user
-        const user = await prisma.user.findUnique({where :
-            {
-                id : id
-            }
-        })
-        if ( !user && !user.role)
+        const userId = Number(req.user?.id)
+        if (!Number.isInteger(userId)) {
+            return res.status(401).json({message : "user not found "})
+        }
+        const user = await prisma.user.findUnique({where : { id: userId }, select: { id: true, role: true }})
+        if (!user)
         {
             return res.status(401).json({message : "user not found "})
         }
-        if ( user.role != 'ACCOUNTS' || user.role != 'ADMIN')
+        if (user.role !== 'ACCOUNTS' && user.role !== 'ADMIN')
         {
             return res.status(403).json({message : "user not authorized "})
         }
-        const amount = await prisma.wallet.findUnique({where : {
-            id : user.id
-        }})
-        return res.status(200).json(amount)
+        const wallet = await prisma.wallet.findUnique({where : { userId: user.id }, select: { balance: true }})
+        return res.status(200).json({ balance: wallet?.balance ?? 0 })
     } catch (error) 
     {
         console.error(error)
@@ -37,19 +34,20 @@ export const getBalance = asyncHandler(async(req , res ) =>
 export const salesList = asyncHandler(async(req , res ) =>
 {
     try {
-        const { id } = req.user
+        const userId = Number(req.user?.id)
+        if (!Number.isInteger(userId)) {
+            return res.status(401).json({message : "user not found "})
+        }
         const user = await prisma.user.findUnique({
-            where :
-            {
-                id : Number.parseInt(id),
-            }
+            where : { id: userId },
+            select: { role: true },
         })
-         if ( !user && !user.role)
+         if (!user)
         {
             return res.status(401).json({message : "user not found "})
         }
     
-        if ( user.role != 'ACCOUNTS' && user.role != 'ADMIN' )
+        if (user.role !== 'ACCOUNTS' && user.role !== 'ADMIN')
         {
             return res.status(403).json({message : "user not authorized "})
         }
@@ -63,12 +61,28 @@ export const salesList = asyncHandler(async(req , res ) =>
             {
                 id : true ,
                 name : true ,
-                expenses : true,
+                expenses : {
+                    select: {
+                        id: true,
+                        amount: true,
+                        note: true,
+                    },
+                },
                 leads : {
                     select :
                     {
+                        id: true,
                         name : true ,
-                        orders : true 
+                        phone: true,
+                        status: true,
+                        orders : {
+                            select: {
+                                id: true,
+                                status: true,
+                                total: true,
+                                createdAt: true,
+                            },
+                        },
                     }
                 }
 

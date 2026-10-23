@@ -1,26 +1,11 @@
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router";
+import { Icon } from "./ui/Navbar";
 
- export default function ChatButton() {
-    const navigate = useNavigate();
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-      
-
-        try {
-            
-            await logoutUser();
-            navigate('/chat');
-        } catch (err) {
-            console.error(err);
-        }
-    };
-    return (
-        <button
-            onClick={handleSubmit}
-            className="rounded bg-red-600 px-4 py-2 text-white transition-colors hover:bg-red-700"
-        >
-            Chat
-        </button>
-    );
+export default function ChatButton({ className = "" }) {
+  return (
+    <Link aria-label="Open team chat" className={className} to="/chat">
+      <Icon name="chat" size={18} />
+      <span>Team chat</span>
+    </Link>
+  );
 }
- 

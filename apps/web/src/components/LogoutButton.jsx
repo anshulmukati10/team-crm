@@ -1,27 +1,34 @@
+import { useState } from "react";
+import { useNavigate } from "react-router";
+import { useAuth } from "../context/WorkspaceContext";
 import { logoutUser } from "../features/auth/authApi";
-import { useNavigate } from "react-router-dom";
 
- export default function LogoutButton() {
-    const navigate = useNavigate();
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-      
+export default function LogoutButton() {
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+  const [error, setError] = useState("");
 
-        try {
-            
-            await logoutUser();
-            navigate('/');
-        } catch (err) {
-            console.error(err);
-        }
-    };
-    return (
-        <button
-            onClick={handleSubmit}
-            className="rounded bg-red-600 px-4 py-2 text-white transition-colors hover:bg-red-700"
-        >
-            Logout
-        </button>
-    );
+  async function handleLogout() {
+    setError("");
+    try {
+      await logoutUser();
+      signOut();
+      navigate("/signin", { replace: true });
+    } catch (logoutError) {
+      setError(
+        typeof logoutError === "string"
+          ? logoutError
+          : logoutError?.message || "Unable to sign out.",
+      );
+    }
+  }
+
+  return (
+    <>
+      <button className="text-button" onClick={handleLogout} type="button">
+        Sign out
+      </button>
+      {error && <span role="alert">{error}</span>}
+    </>
+  );
 }
- 

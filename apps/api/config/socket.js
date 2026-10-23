@@ -34,7 +34,7 @@ export const socketInit = (httpServer) => {
         socket.on('join_room', async (roomId) => {
             const member = await prisma.groupMember.findUnique({
                 where: {
-                    userId_roomId: {
+                    roomId_userId : {
                         userId: Number(socket.data.user.id),
                         roomId
                     }
@@ -49,7 +49,7 @@ export const socketInit = (httpServer) => {
             try {
                 const member = await prisma.groupMember.findUnique({
                     where: {
-                        userId_roomId: { userId, roomId }
+                        roomId_userId: { userId, roomId }
                     }
                 });
                 if (!member) return socket.emit('room_error', 'You are not a member of this room');
@@ -89,4 +89,10 @@ export const getIo = () => {
         throw new Error("Socket.io is not intialized")
     }
     return io;
+}
+
+export const emitWorkspaceUpdate = () => {
+    if (io) {
+        io.emit('workspace_update')
+    }
 }

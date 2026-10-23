@@ -54,9 +54,10 @@ if (fs.existsSync(swaggerSpecPath)) {
 }
 app.use('/auth', userRoutes)
 app.use('/admin', adminRoutes)
-app.use('/warehouse', rateLimiter(5, 60), wareHouseRoutes)
+app.use('/warehouse', wareHouseRoutes)
 app.use('/sales', salesRoutes)
 app.use('/accounts', accountRoutes)
+
 httpServer.listen(PORT, () => {
     console.log(`server is running on port ${PORT}`)
 })

@@ -1,4 +1,4 @@
-import { createLead, createProduct, removeMember ,  createRoom, creditAmount, deleteLead, deleteProduct, getAllUsers, getLeads, getRequestList, handleRequest, updateProduct } from "../../controller/adminController/adminController.js";
+import { createLead, createProduct, removeMember ,  createRoom, creditAmount, deleteLead, deleteProduct, getAllUsers, getLeads, getRequestList, handleRequest, updateProduct, getBalance, deleteRooms } from "../../controller/adminController/adminController.js";
 import express from "express"
 import authMiddleware from "../../middleware/authMiddleware.js";
 import adminMiddleware from "../../middleware/adminMiddleware.js";
@@ -18,4 +18,6 @@ router.post ('/handle-request'  , authMiddleware , adminMiddleware , handleReque
 router.post('/room' , authMiddleware , adminMiddleware , createRoom )
 router.delete('/room' , authMiddleware , adminMiddleware , removeMember )
 router.get('/get-all-user' , authMiddleware , adminMiddleware , getAllUsers)
+router.get('/balance' , authMiddleware , adminMiddleware , getBalance )
+router.delete('/delete-room' , authMiddleware , adminMiddleware , deleteRooms)
 export default router ;

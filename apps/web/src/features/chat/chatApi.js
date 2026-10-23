@@ -43,3 +43,18 @@ export const getAllUsers = async () => {
         throw error?.response?.data?.message || "Failed to fetch users";
     }
 }
+
+
+export const getRooms = async() =>
+{
+    try 
+    {
+        const rooms = await axios.get(`${API_BASE}/auth/get-rooms`)
+        return rooms.data ;
+    }
+    catch(error)
+    {
+        throw error?.response?.data?.message || "Failed to fetch rooms";
+
+    }
+}
