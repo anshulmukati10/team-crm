@@ -43,7 +43,7 @@ enum planType{
     PRO
 }
 
-enum planStatus{
+enum subscriptionStatus{
     ACTIVE
     CANCEL
     EXPIRE
@@ -64,18 +64,22 @@ model User {
     message Message[]
     group GroupMember[]
     payment Payment[] 
-    memberOf String  @unique
+    memberOf String  
     company Company  @relation(fields : [memberOf] , references : [id])
 }
 
 model Company {
     id        String  @id @default(uuid())
     name String 
+    email String @unique 
+    password String 
     member User[]
     order Order[]
     balance Wallet?
     planId String 
     plan Plan @relation(fields : [planId] , references : [id])
+    subscription Subscription[]
+    payment Payment[]
 }
 
 model Lead {
@@ -189,7 +193,11 @@ model Payment {
     stripeIntentsId String? 
     user User @relation(fields : [userId] , references :[id])
     createdAt DateTime @default(now())
-
+    companyId       String?
+    planId          String?
+    company         Company?      @relation(fields: [companyId], references: [id])
+    plan            Plan?         @relation(fields: [planId], references: [id])
+   
     @@index([userId , createdAt])
 }
 
@@ -201,8 +209,8 @@ model Plan{
     details Details?
     type planType @default(FREE)
     companies Company[]
-    status planStatus @default(INACTIVE)
-
+    subscription Subscription[]
+    payments     Payment[]
     createdAt DateTime @default(now())
     
     @@index([createdAt , id])
@@ -215,4 +223,22 @@ model Details{
     maxWallet Int 
     planId String @unique
     plan Plan @relation(fields : [planId] , references : [id])
+}
+
+model Subscription{
+    id String @id @default(uuid())
+    status subscriptionStatus @default(ACTIVE)
+    companyId String 
+    company Company @relation(fields : [companyId] , references : [id])
+    planId String 
+    plan Plan @relation(fields : [planId] , references : [id])
+    
+    createdAt DateTime @default(now())
+    startedAt DateTime @default(now())
+    canceledAt DateTime? 
+    endAt DateTime?
+    updatedAt        DateTime  @updatedAt
+    
+    @@index([companyId , planId ])
+
 }

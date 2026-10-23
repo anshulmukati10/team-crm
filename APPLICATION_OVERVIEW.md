@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Team CRM is an internal workspace for coordinating sales leads, customer orders, product inventory, stock replenishment, account activity, and team chat. Its intended workflow connects sales, warehouse, accounts, and administration from lead assignment through order fulfillment.
+Team CRM is an internal workspace for coordinating company members, subscription plans, sales leads, customer orders, product inventory, stock replenishment, account activity, and team chat. Its intended workflow connects sales, warehouse, accounts, and administration from lead assignment through order fulfillment.
 
 This document describes both the intended product behavior and the implementation currently present in the repository. Where those differ, the difference is called out explicitly.
 
@@ -15,15 +15,17 @@ The repository is a JavaScript monorepo:
 | Web client | [`apps/web/`](./apps/web/) | React single-page application built with Vite |
 | API | [`apps/api/`](./apps/api/) | Express REST API, authentication, business logic, and Socket.IO setup |
 | Database package | [`packages/db/`](./packages/db/) | Prisma schema and migrations |
-| Shared UI package | [`packages/ui/`](./packages/ui/) | Shared UI package (currently minimal) |
 
-The API mounts routes under `/auth`, `/admin`, `/warehouse`, `/sales`, and `/accounts`. It uses Prisma with PostgreSQL, JWT-based authentication, cookies, and Socket.IO for chat. The frontend uses React Router, Axios, and `socket.io-client`.
+The API mounts routes under `/auth`, `/admin`, `/warehouse`, `/sales`, and `/accounts`. It uses Prisma with PostgreSQL, JWT-based authentication, cookies, and Socket.IO for chat. The frontend uses React Router, Axios, and `socket.io-client`. The standalone shared UI package is currently not present in the repository.
 
 ### Main data concepts
 
 The Prisma schema in [`packages/db/prisma/schema.prisma`](./packages/db/prisma/schema.prisma) defines:
 
-- **User** — a person with one of the roles listed below.
+- **User** — a person with one of the roles listed below, associated with a company through `memberOf`.
+- **Company** — a customer workspace that owns members, orders, a wallet, and one currently assigned plan.
+- **Plan and Details** — a subscription tier (Free or Pro) with plan-specific limits and identity, activity, and pricing metadata.
+- **Subscription** — a company/plan subscription record with an active, cancel, expire, or inactive status and lifecycle timestamps.
 - **Lead** — a customer prospect assigned to a sales user, with a pending/completed/declined status.
 - **Product** — catalog item with price and stock quantity.
 - **Order and OrderItem** — a sales order linked to a lead and sales user, with product quantities and prices.
@@ -31,6 +33,10 @@ The Prisma schema in [`packages/db/prisma/schema.prisma`](./packages/db/prisma/s
 - **Wallet and Expenses** — account balance and recorded amounts associated with users.
 - **Room, GroupMember, and Message** — group chat rooms, membership, and messages.
 - **Payment** — a user-linked payment record with amount, currency, a pending/success/failure status, and an optional Stripe PaymentIntent ID.
+
+`User.memberOf` is a non-unique company foreign key, so a company can contain multiple users. `Plan` retains the company's current plan relationship, while `Subscription` records the status and lifecycle of company/plan subscriptions. Plan status is therefore no longer stored directly on `Plan`; use `Subscription.status` for that state.
+
+The subscription entities are present in the Prisma data model, but there is no dedicated subscription route or controller in the current API surface. Treat subscriptions as persisted schema support until that API workflow is implemented.
 
 ## Roles and intended permissions
 
@@ -246,3 +252,9 @@ The configured ngrok tunnel forwards to port `8000` and uses the `wish-sway-imag
 - Accounts operations: [`apps/api/controller/accountsController.js`](./apps/api/controller/accountsController.js)
 - Frontend entry and routes: [`apps/web/src/App.jsx`](./apps/web/src/App.jsx)
 - Frontend auth state: [`apps/web/src/context/AuthContext.jsx`](./apps/web/src/context/AuthContext.jsx)
+
+
+
+"id": "a6b74e7e-82e2-4022-ad3f-f4552ed635bd", f
+
+    "id": "3a7513c9-cf1e-44b8-8eac-b6b0476214cc", p

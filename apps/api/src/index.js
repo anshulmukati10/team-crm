@@ -9,6 +9,8 @@ import accountRoutes from "../routes/accountRoute.js"
 import salesRoutes from '../routes/saleRoute.js'
 import swaggerUi from 'swagger-ui-express'
 import paymentRoutes from '../routes/paymentRoute.js'
+import planRoute from "../routes/planRoute.js";
+import companyRoute from "../routes/companyRoutes/companyRoute.js"
 import fs from 'fs'
 import { fileURLToPath } from "url";
 import path from 'path'
@@ -64,6 +66,9 @@ app.use('/warehouse', wareHouseRoutes)
 app.use('/sales', salesRoutes)
 app.use('/accounts', accountRoutes)
 app.use('/payment' , paymentRoutes)
+app.use("/plans", planRoute);
+app.use("/company" , companyRoute );
+
  
 
 
