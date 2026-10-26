@@ -356,7 +356,6 @@ export const removeMember = asyncHandler(async (req, res) => {
             return res.status(404).json({ message: "Room not found" })
         }
 
-        // 1. Changed userId_roomId to roomId_userId
         const membership = await prisma.groupMember.findUnique({
             where: {
                 roomId_userId: {
@@ -368,8 +367,13 @@ export const removeMember = asyncHandler(async (req, res) => {
         if (!membership) {
             return res.status(404).json({ message: "Member not found in room" })
         }
+        
+        const user  = await prisma.user.findUnique({ where: { id: Number(memberId),} })
+        if (!user) {
+            return res.status(404).json({ message: "user not found" })
+        }
+        if(user.role === 'ADMIN') return res.status(404).json({ message: " admin cant be removed " })
 
-        // 2. Changed userId_roomId to roomId_userId here as well
         await prisma.groupMember.delete({
             where: {
                 roomId_userId: {
@@ -427,7 +431,7 @@ export const getBalance = asyncHandler(async (req, res) => {
                 userId: id
             }
         })
-     return res.json(amount)
+        return res.json(amount)
     } catch (error) {
         console.log(error)
         return res.status(500).json({ message: "Internal Server error i fetching balance " })
@@ -437,24 +441,75 @@ export const getBalance = asyncHandler(async (req, res) => {
 
 
 export const deleteRooms = asyncHandler(
-    async (req , res ) => {
+    async (req, res) => {
         try {
-            const { rooms }=  req.body
-            if (!rooms && Array.isArray(rooms) && rooms.length === 0){
-              return res.status(401).json({message : " rooms is missing "})
-              
+            const { rooms } = req.body
+            if (!rooms && Array.isArray(rooms) && rooms.length === 0) {
+                return res.status(401).json({ message: " rooms is missing " })
+
             }
-            await prisma.room.deleteMany( { where :
-                {id :
-                 {
-                    in : rooms
-                 }
+            await prisma.room.deleteMany({
+                where:
+                {
+                    id:
+                    {
+                        in: rooms
+                    }
                 }
             })
-            return res.status(200).json({message : "successful "})
+            return res.status(200).json({ message: "successful " })
         } catch (error) {
             console.log(error)
-            return res.status(500).json({message : " internal server error at deleting room "})
+            return res.status(500).json({ message: " internal server error at deleting room " })
         }
     }
 )
+
+
+
+export const addUserToGroup = asyncHandler(async (req, res) => {
+    try {
+        const { userId } = req.body;
+        const numericUserId = Number.parseInt(userId)
+        const { roomId } = req.body;
+
+        if (!roomId && !userId) return res.json({ message: " empty fields " })
+        const room = await prisma.room.findUnique({
+            where:
+            {
+                id: roomId,
+            }
+        })
+        if (!room) return res.json({ message: " room is missing  " })
+            const user = await prisma.user.findUnique({
+            where:
+            {
+                id: numericUserId,
+            }
+        })
+        if (!user) return res.json({ message: " room is missing  " })
+        
+        await prisma.groupMember.upsert({ where :
+            {
+                roomId_userId :
+                {
+                    roomId , 
+                    userId : numericUserId
+                }
+            },
+            update : {},
+            create :
+            {
+                roomId ,
+                userId : numericUserId ,
+            }   
+        })
+        emitWorkspaceUpdate()
+        return res.status(200).json({ message: "member added to group" })
+        
+    } catch (error) {
+        console.log(error)
+        return res.status(500).json({ message: " Server error in adding member inside group " })
+    }
+
+})

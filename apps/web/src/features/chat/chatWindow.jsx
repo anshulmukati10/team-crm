@@ -3,11 +3,9 @@ import { io } from "socket.io-client";
 import {
   Icon,
   initials,
-  Modal,
   PageHeading,
 } from "../../components/ui/Navbar";
 import { ROLE_LABELS, useAuth } from "../../context/WorkspaceContext";
-import { createAdminRoom, getAdminUsers } from "../admin/adminApi";
 import { getMessages, getRooms } from "./chatApi";
 import MessageInput from "./messageInput";
 import useWorkspaceUpdates from "../../context/useWorkspaceUpdates";
@@ -45,14 +43,10 @@ export default function ChatWindow({ canManage = false }) {
     roomId: "",
     messages: [],
   });
-  const [users, setUsers] = useState([]);
-  const [showCreateForm, setShowCreateForm] = useState(false);
   const [loadingRooms, setLoadingRooms] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
-  const [loadingUsers, setLoadingUsers] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
   const socketRef = useRef(null);
   const bottomRef = useRef(null);
   const activeRoom = rooms.find((room) => room.id === activeRoomId);
@@ -150,51 +144,6 @@ export default function ChatWindow({ canManage = false }) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  async function openCreateForm() {
-    setError("");
-    setLoadingUsers(true);
-    try {
-      const allUsers = await getAdminUsers();
-      setUsers(Array.isArray(allUsers) ? allUsers : []);
-      setShowCreateForm(true);
-    } catch (loadError) {
-      setError(getErrorMessage(loadError));
-    } finally {
-      setLoadingUsers(false);
-    }
-  }
-
-  async function handleCreateGroup(event) {
-    event.preventDefault();
-    const formElement = event.currentTarget;
-    const form = new FormData(formElement);
-    const groupName = String(form.get("groupName") || "").trim();
-    const memberIds = Array.from(
-      formElement.elements.memberIds.selectedOptions,
-      (option) => Number(option.value),
-    );
-    if (memberIds.length === 0) {
-      setError("Add at least one team member to create a group.");
-      return;
-    }
-    setSaving(true);
-    setError("");
-    try {
-      const room = await createAdminRoom(groupName, memberIds);
-      setMessageState({ roomId: room.id, messages: [] });
-      setRooms((current) => [
-        { ...room, name: room.name || groupName, memberIds },
-        ...current,
-      ]);
-      setActiveRoomId(room.id);
-      setShowCreateForm(false);
-    } catch (createError) {
-      setError(getErrorMessage(createError));
-    } finally {
-      setSaving(false);
-    }
-  }
-
   function sendMessage(text) {
     const socket = socketRef.current;
     if (!activeRoomId || !socket?.connected) {
@@ -209,22 +158,7 @@ export default function ChatWindow({ canManage = false }) {
 
   return (
     <>
-      <PageHeading
-        title="Team chat"
-        action={
-          canManage ? (
-            <button
-              className="button button-primary"
-              disabled={loadingUsers}
-              onClick={openCreateForm}
-              type="button"
-            >
-              <Icon name="plus" size={17} />
-              {loadingUsers ? "Loading…" : "Create group"}
-            </button>
-          ) : null
-        }
-      />
+      <PageHeading title="Team chat" />
       {(error || (!API_BASE && activeRoomId)) && (
         <div className="inline-notice error-notice" role="alert">
           <Icon name="close" size={17} />
@@ -318,50 +252,6 @@ export default function ChatWindow({ canManage = false }) {
             <div className="empty-state">Select a group.</div>
           )}
         </section>
-      )}
-      {showCreateForm && (
-        <Modal
-          onClose={() => setShowCreateForm(false)}
-          title="Create group"
-        >
-          <form className="form-stack" onSubmit={handleCreateGroup}>
-            <label>
-              Group name
-              <input autoFocus maxLength="80" name="groupName" required />
-            </label>
-            <label>
-              Add members
-              <select
-                multiple
-                name="memberIds"
-                required
-                size={Math.min(Math.max(users.length, 2), 6)}
-              >
-                {users.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.name} · {ROLE_LABELS[member.role] || member.role}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="modal-actions">
-              <button
-                className="button button-secondary"
-                onClick={() => setShowCreateForm(false)}
-                type="button"
-              >
-                Cancel
-              </button>
-              <button
-                className="button button-primary"
-                disabled={saving || users.length === 0}
-                type="submit"
-              >
-                {saving ? "Creating…" : "Create group"}
-              </button>
-            </div>
-          </form>
-        </Modal>
       )}
     </>
   );

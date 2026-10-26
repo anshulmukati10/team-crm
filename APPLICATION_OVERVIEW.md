@@ -54,11 +54,11 @@ The table above is the **intended** access model, not a guarantee that every per
 
 - Admin routes use `adminMiddleware`, but that middleware checks `req.body.role` before the authenticated `req.user.role`. The request body must not be treated as a trusted source of role; this makes the current admin gate unsafe.
 - Registration is public, and role restrictions exist only in the frontend form. The API accepts the submitted role, so hiding Admin in the form is not sufficient to prevent privileged role assignment.
-- The sales order route authenticates users and checks that the authenticated account is Sales, but the order payload also supplies `salesId` and `leadId`; the API should validate that the lead belongs to the signed-in user and should derive the sales ID from the authenticated identity.
+- The sales order endpoint now checks that the signed-in user is Sales, verifies that the lead is assigned to that user, and derives the order's sales ID from the authenticated identity.
 - Warehouse handlers do not all have consistent role enforcement. In particular, the stock-data authorization condition does not correctly restrict access.
-- Accounts sales-list access checks Accounts/Admin, but the balance handler's role condition is incorrect and can reject valid users.
-- The frontend's `Layout` checks for a local-storage token, not a server-validated role. The Dashboard route is outside that layout. Frontend route visibility is not a replacement for API authorization.
-- Login issues an HttpOnly cookie, while the frontend auth context also expects a local-storage token/user. Confirm and reconcile this state flow before relying on protected-page behavior.
+- Accounts endpoints check for Accounts/Admin in their controllers. Keep these checks covered by tests as the handlers evolve.
+- The frontend filters navigation by role and guards selected routes; other routes are shared. These checks only control the user interface. The API must independently authorize every request.
+- Login sets an HttpOnly cookie, while the frontend auth context also stores a placeholder session marker in local storage. The cookie is the credential sent with API requests; the marker is not a server-validated token. Ensure session restoration, logout, and expired-cookie behavior stay consistent.
 
 Before production use, enforce roles and resource ownership on the server for every protected operation, prevent public self-assignment of privileged roles, and test each role against both allowed and denied actions. See the API route files and controller files linked under [Related implementation](#related-implementation).
 
@@ -87,19 +87,27 @@ src/
 ├── App.css
 ├── index.css
 ├── assets/
+│   └── teamcrm-mark.svg
 ├── components/
 │   ├── Layout.jsx
 │   ├── LogoutButton.jsx
+│   ├── ChatButton.jsx
 │   └── ui/
 │       ├── Footer.jsx
 │       └── Navbar.jsx
 ├── context/
-│   └── AuthContext.jsx
+│   ├── AuthContext.jsx
+│   ├── WorkspaceContext.jsx
+│   └── useWorkspaceUpdates.js
 ├── features/
+│   ├── accounts/
+│   │   └── accountApi.js
 │   ├── admin/
 │   │   ├── adminApi.js
 │   │   ├── manageRequest.jsx
 │   │   └── userManagment.jsx
+│   ├── dashboard/
+│   │   └── dashBoardApi.js
 │   ├── auth/
 │   │   ├── authApi.js
 │   │   ├── LoginForm.jsx
@@ -112,7 +120,7 @@ src/
 │   ├── sales/
 │   │   ├── Lead.jsx
 │   │   ├── SaleOrder.jsx
-│   │   └── saleApi.js
+│   │   └── salesApi.js
 │   └── warehouse/
 │       ├── ImportInventory.jsx
 │       ├── ImportRequest.jsx
@@ -126,7 +134,9 @@ src/
     └── Profile.jsx
 ```
 
-The current route definitions are in [`apps/web/src/App.jsx`](./apps/web/src/App.jsx). The Dashboard is a placeholder, and the account screen and some feature components may need completion or wiring into routes. The current project scripts are `dev`, `build`, `lint`, and `preview`; there is no frontend test script in [`apps/web/package.json`](./apps/web/package.json).
+The route definitions and selected route-level role checks are in [`apps/web/src/App.jsx`](./apps/web/src/App.jsx). The application shell and role-filtered navigation are in [`apps/web/src/components/Layout.jsx`](./apps/web/src/components/Layout.jsx). Shared identity and role state are provided by `AuthContext` and `WorkspaceContext`; workspace update events are handled by `useWorkspaceUpdates.js`. The Dashboard loads different summary data by role. Sign-in and registration are available at `/signin` and `/signup`.
+
+The project scripts are `dev`, `build`, `lint`, and `preview`; there is no frontend test script in [`apps/web/package.json`](./apps/web/package.json). Existing feature folders are a useful foundation, but some workspace state is in-memory-only; use the backend as the source of truth for business data.
 
 ### Recommended frontend structure
 
@@ -141,14 +151,15 @@ apps/web/src/
 ├── components/
 │   ├── layout/                 # App shell, navigation, footer, page containers
 │   └── ui/                     # Reusable buttons, inputs, tables, dialogs, alerts
-├── context/                    # App-wide state providers (auth/session, if needed)
 ├── features/
 │   ├── auth/                   # Login, registration, profile, auth API and forms
 │   ├── admin/                  # User, product, lead, request, and chat administration
+│   ├── dashboard/              # Role-specific overview data and summary widgets
 │   ├── sales/                  # Lead views and order creation
 │   ├── warehouse/              # Inventory, order fulfillment, import requests
 │   ├── accounts/               # Balance and sales/expense reporting
 │   └── chat/                   # Rooms, membership UI, messages, socket behavior
+├── context/                    # Small app-wide auth/session or workspace state
 ├── hooks/                      # Reusable React hooks not owned by one feature
 ├── lib/
 │   ├── apiClient.js            # Shared Axios instance, credentials, base URL
@@ -166,7 +177,7 @@ apps/web/src/
 - **`screens/`:** One component per route/page. Keep these components focused on page layout and composing feature components rather than embedding API/business logic.
 - **`features/<domain>/`:** Keep domain-specific forms, tables, components, API functions, and hooks together. For example, `features/warehouse/` owns stock lists and request forms; `features/accounts/` owns balance and reporting views.
 - **`components/ui/`:** Reusable presentational building blocks with no domain-specific permissions or API calls. Keep application shell pieces under `components/layout/`.
-- **`context/`:** Only cross-application state that multiple routes need, such as the signed-in user's identity. Avoid duplicating server data or storing secrets in browser storage.
+- **`context/`:** Only cross-application state that multiple routes need, such as the signed-in user's identity and lightweight workspace events. Avoid treating duplicated server data as authoritative or storing credentials in browser storage.
 - **`lib/apiClient.js`:** Centralize the API base URL, cookie/credential configuration, and common request setup so feature API modules do not each configure Axios differently.
 - **`hooks/`:** Reusable stateful behavior shared by multiple features. Domain-specific hooks should stay inside their feature folder.
 - **`utils/` and `constants/`:** Pure reusable helpers and shared names (especially role and route constants); do not use these as catch-all folders for business logic.

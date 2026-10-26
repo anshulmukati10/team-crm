@@ -5,7 +5,7 @@ import { dispatchWorkspaceUpdate } from "./useWorkspaceUpdates";
 
 const API_BASE = import.meta.env.VITE_API_URL?.replace(/\/+$/, "");
 
-// eslint-disable-next-line react-refresh/only-export-components
+
 export const ROLES = {
   ADMIN: "ADMIN",
   SALES: "SALES",
@@ -14,7 +14,7 @@ export const ROLES = {
 };
 
 
-// eslint-disable-next-line react-refresh/only-export-components
+
 export const ROLE_LABELS = {
   [ROLES.ADMIN]: "Administrator",
   [ROLES.SALES]: "Sales",

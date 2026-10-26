@@ -58,3 +58,17 @@ export const getRooms = async() =>
 
     }
 }
+
+
+export const addMember = async ({ roomId, userId }) => {
+    try {
+        const response = await axios.put(`${API_BASE}/admin/room`, {
+            roomId,
+            userId,
+        });
+        return response.data;
+    } catch (error) {
+        throw error?.response?.data?.message || "Failed to add member";
+    }
+};
+
