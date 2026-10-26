@@ -7,8 +7,8 @@
   "scripts": {
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
-    "swagger": "node config/swagger-gen.js",
-    "socket": "node config/test-socket.js"
+    "swagger": "node config/swagger-gen.js"
+
   },
   "keywords": [],
   "author": "",

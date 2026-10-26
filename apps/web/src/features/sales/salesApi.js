@@ -38,3 +38,17 @@ export const getSalesOrders = async () => {
         throw error?.response?.data?.message || "Unable to load orders.";
     }
 };
+
+
+export const updateLeadStatus = async (leadId, status) => {
+    try {
+        const response = await axios.put(
+            `${baseUrl}/lead`,
+            { status },
+            { params: { id: leadId } },
+        );
+        return response?.data;
+    } catch (error) {
+        throw error?.response?.data?.message || "Unable to update lead status.";
+    }
+};

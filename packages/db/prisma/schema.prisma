@@ -48,7 +48,7 @@ model User {
 }
 
 model Lead {
-    id String @id
+    id        String  @id @default(uuid())
     name String 
     phone String @unique @db.VarChar(10)
     status leadStatus @default(PENDING)
@@ -58,7 +58,7 @@ model Lead {
 }
  
 model Product {
-    id String @id
+    id        String  @id @default(uuid())
     name String 
     price Int @default(0)
     stock Int
@@ -68,7 +68,7 @@ model Product {
 }
 
 model Order {
-    id String @id
+    id        String  @id @default(uuid())
     status orderStatus @default(PLACED)
     total Decimal 
     createdAt DateTime @default(now())
@@ -80,7 +80,7 @@ model Order {
 }
  
  model OrderItem {
-    id String @id 
+    id        String  @id @default(uuid())
     quantity Int @default(1)
     price Int 
     orderId String 

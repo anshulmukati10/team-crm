@@ -8,8 +8,16 @@ import {
   StatusBadge,
 } from "../../components/ui/Navbar";
 import { useAuth } from "../../context/WorkspaceContext";
-import { createSalesOrder, getSalesOrders } from "./salesApi";
-import { exportWarehouseOrder, getWarehouseOrders } from "../warehouse/wareHouseApi";
+import {
+  createSalesOrder,
+  getSalesLeads,
+  getSalesOrders,
+} from "./salesApi";
+import {
+  exportWarehouseOrder,
+  getWarehouseOrders,
+  getWarehouseStock,
+} from "../warehouse/wareHouseApi";
 import useWorkspaceUpdates from "../../context/useWorkspaceUpdates";
 import { getAccountSales } from "../accounts/accountApi";
 
@@ -31,8 +39,11 @@ export default function Orders() {
   const { role, user } = useAuth();
   const workspaceVersion = useWorkspaceUpdates();
   const [orders, setOrders] = useState([]);
+  const [leads, setLeads] = useState([]);
+  const [products, setProducts] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingOptions, setLoadingOptions] = useState(false);
   const [saving, setSaving] = useState(false);
   const [processingId, setProcessingId] = useState(null);
   const [error, setError] = useState("");
@@ -68,6 +79,27 @@ export default function Orders() {
     Promise.resolve().then(loadOrders);
   }, [loadOrders, role, workspaceVersion]);
 
+  async function openCreateOrder() {
+    setShowForm(true);
+    setLoadingOptions(true);
+    setError("");
+    try {
+      const [leadResult, productResult] = await Promise.all([
+        getSalesLeads(),
+        getWarehouseStock(),
+      ]);
+      if (!Array.isArray(leadResult) || !Array.isArray(productResult)) {
+        throw new Error("The API returned invalid lead or product data.");
+      }
+      setLeads(leadResult);
+      setProducts(productResult);
+    } catch (loadError) {
+      setError(getErrorMessage(loadError));
+    } finally {
+      setLoadingOptions(false);
+    }
+  }
+
   async function submitOrder(event) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -75,6 +107,18 @@ export default function Orders() {
     const leadId = String(form.get("leadId") || "").trim();
     const productId = String(form.get("productId") || "").trim();
     const quantity = Number(form.get("quantity"));
+    if (!leads.some((lead) => lead.id === leadId)) {
+      setError("Select a valid lead.");
+      return;
+    }
+    if (!products.some((product) => product.id === productId)) {
+      setError("Select a valid product.");
+      return;
+    }
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      setError("Quantity must be a positive whole number.");
+      return;
+    }
     if (!Number.isInteger(salesId) || salesId < 1) {
       setError("The signed-in account does not have a valid sales ID.");
       return;
@@ -125,7 +169,7 @@ export default function Orders() {
           role === "SALES" ? (
             <button
               className="button button-primary"
-              onClick={() => setShowForm(true)}
+              onClick={openCreateOrder}
               type="button"
             >
               <Icon name="plus" size={17} /> Create order
@@ -213,17 +257,45 @@ export default function Orders() {
         <Modal onClose={() => setShowForm(false)} title="Create order">
           <form className="form-stack" onSubmit={submitOrder}>
             <label>
-              Lead ID
-              <input autoFocus name="leadId" required />
+              Lead
+              <select autoFocus disabled={loadingOptions} name="leadId" required>
+                <option value="">
+                  {loadingOptions ? "Loading leads…" : "Select a lead"}
+                </option>
+                {leads.map((lead) => (
+                  <option key={lead.id} value={lead.id}>
+                    {lead.name} · {lead.id}
+                  </option>
+                ))}
+              </select>
             </label>
             <label>
-              Product ID
-              <input name="productId" required />
+              Product
+              <select disabled={loadingOptions} name="productId" required>
+                <option value="">
+                  {loadingOptions ? "Loading products…" : "Select a product"}
+                </option>
+                {products.map((product) => (
+                  <option key={product.id} value={product.id}>
+                    {product.name} · {product.stock} in stock
+                  </option>
+                ))}
+              </select>
             </label>
             <label>
               Quantity
               <input min="1" name="quantity" required type="number" />
             </label>
+            {!loadingOptions && leads.length === 0 && (
+              <p className="form-error" role="status">
+                No leads are assigned to your account.
+              </p>
+            )}
+            {!loadingOptions && products.length === 0 && (
+              <p className="form-error" role="status">
+                No products are currently available.
+              </p>
+            )}
             <div className="modal-actions">
               <button
                 className="button button-secondary"
@@ -234,7 +306,12 @@ export default function Orders() {
               </button>
               <button
                 className="button button-primary"
-                disabled={saving}
+                disabled={
+                  saving ||
+                  loadingOptions ||
+                  leads.length === 0 ||
+                  products.length === 0
+                }
                 type="submit"
               >
                 {saving ? "Creating…" : "Create order"}

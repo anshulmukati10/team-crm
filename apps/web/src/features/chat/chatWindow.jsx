@@ -3,6 +3,7 @@ import { io } from "socket.io-client";
 import {
   Icon,
   initials,
+  Modal,
   PageHeading,
 } from "../../components/ui/Navbar";
 import { ROLE_LABELS, useAuth } from "../../context/WorkspaceContext";
@@ -12,6 +13,7 @@ import useWorkspaceUpdates from "../../context/useWorkspaceUpdates";
 
 const API_BASE = import.meta.env.VITE_API_URL?.replace(/\/+$/, "");
 const EMPTY_MESSAGES = [];
+const EMPTY_RECEIPTS = [];
 
 function getErrorMessage(error) {
   return typeof error === "string"
@@ -19,12 +21,15 @@ function getErrorMessage(error) {
     : error?.message || "Unable to load this group.";
 }
 
-function normalizeMessage(entry) {
+function normalizeMessage(entry, delivered = true) {
   return {
     id: entry.id,
     author: entry.user?.name || "Team member",
     role: ROLE_LABELS[entry.user?.role] || entry.user?.role || "",
     text: entry.text,
+    senderId: entry.userId,
+    clientMessageId: entry.clientMessageId,
+    delivered,
     time: entry.createdAt
       ? new Date(entry.createdAt).toLocaleTimeString([], {
           hour: "numeric",
@@ -32,6 +37,59 @@ function normalizeMessage(entry) {
         })
       : "",
   };
+}
+
+function MessageTicks({ delivered, readByAll }) {
+  const color = readByAll
+    ? "text-blue-700"
+    : delivered
+      ? "text-slate-400"
+      : "text-slate-300";
+  const label = readByAll
+    ? "Read by everyone"
+    : delivered
+      ? "Delivered"
+      : "Sent";
+
+  return (
+    <svg
+      aria-label={label}
+      className={`inline-block shrink-0 ${color}`}
+      fill="none"
+      height="16"
+      role="img"
+      viewBox="0 0 24 16"
+      width={delivered ? "22" : "14"}
+    >
+      {delivered ? (
+        <path
+          d="m1.5 8 4.2 4.2L15 3M8.5 8l4.2 4.2L22 3"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+        />
+      ) : (
+        <path
+          d="m2 8 4.2 4.2L16 3"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+        />
+      )}
+    </svg>
+  );
+}
+
+function formatSeenAt(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
 }
 
 export default function ChatWindow({ canManage = false }) {
@@ -47,6 +105,13 @@ export default function ChatWindow({ canManage = false }) {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [messageInfoId, setMessageInfoId] = useState("");
+  const [receiptState, setReceiptState] = useState({ roomId: "", receipts: [] });
+  const receipts = receiptState.roomId === activeRoomId
+    ? receiptState.receipts
+    : EMPTY_RECEIPTS;
+  const seenMessageIdsRef = useRef(new Set());
+  const visibleObserverRef = useRef(null);
   const socketRef = useRef(null);
   const bottomRef = useRef(null);
   const activeRoom = rooms.find((room) => room.id === activeRoomId);
@@ -100,7 +165,9 @@ export default function ChatWindow({ canManage = false }) {
         if (active && result) {
           setMessageState({
             roomId: activeRoomId,
-            messages: Array.isArray(result) ? result.map(normalizeMessage) : [],
+            messages: Array.isArray(result)
+              ? result.map((entry) => normalizeMessage(entry))
+              : [],
           });
         }
       })
@@ -111,19 +178,47 @@ export default function ChatWindow({ canManage = false }) {
         if (active) setLoadingMessages(false);
       });
 
+    seenMessageIdsRef.current.clear();
     const socket = io(API_BASE, { withCredentials: true });
     socketRef.current = socket;
     socket.on("connect", () => socket.emit("join_room", activeRoomId));
     socket.on("receive_message", (entry) => {
       if (active) {
+        const receivedMessage = normalizeMessage(entry);
         setMessageState((current) =>
           current.roomId === activeRoomId
             ? {
                 ...current,
-                messages: [...current.messages, normalizeMessage(entry)],
+                messages: entry.clientMessageId &&
+                  current.messages.some(
+                    (message) =>
+                      message.clientMessageId === entry.clientMessageId,
+                  )
+                    ? current.messages.map((message) =>
+                        message.clientMessageId === entry.clientMessageId
+                          ? receivedMessage
+                          : message,
+                      )
+                    : [...current.messages, receivedMessage],
               }
             : current,
         );
+      }
+    });
+    socket.on("receipts_sync", (sync) => {
+      if (active && String(sync.roomId) === String(activeRoomId)) {
+        setReceiptState({
+          roomId: activeRoomId,
+          receipts: Array.isArray(sync.receipts) ? sync.receipts : [],
+        });
+      }
+    });
+    socket.on("receipts_updated", (update) => {
+      if (active && String(update.roomId) === String(activeRoomId)) {
+        setReceiptState({
+          roomId: activeRoomId,
+          receipts: Array.isArray(update.receipts) ? update.receipts : [],
+        });
       }
     });
     socket.on("room_error", (message) => {
@@ -144,6 +239,62 @@ export default function ChatWindow({ canManage = false }) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  useEffect(() => {
+    if (!activeRoomId || !socketRef.current) return undefined;
+    if (!("IntersectionObserver" in window)) return undefined;
+
+    visibleObserverRef.current?.disconnect();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visibleIds = entries
+          .filter((entry) => entry.isIntersecting && entry.intersectionRatio >= 0.6)
+          .map((entry) => entry.target.dataset.messageId)
+          .filter(Boolean);
+
+        if (!visibleIds.length) return;
+        const visibleId = visibleIds[visibleIds.length - 1];
+        if (seenMessageIdsRef.current.has(visibleId)) return;
+        seenMessageIdsRef.current.add(visibleId);
+        socketRef.current?.emit("mark_message_seen", {
+          roomId: activeRoomId,
+          messageId: visibleId,
+        });
+      },
+      { threshold: 0.6 },
+    );
+    visibleObserverRef.current = observer;
+    document.querySelectorAll("[data-chat-message-id]").forEach((element) => observer.observe(element));
+
+    return () => observer.disconnect();
+  }, [activeRoomId, messages]);
+
+  function seenByForMessage(messageId) {
+    const messageRank = messages.findIndex((message) => message.id === messageId) + 1;
+    if (messageRank < 1) return [];
+    return receipts
+      .filter((receipt) =>
+        Number(receipt.userId) !== Number(user.id) &&
+        Number(receipt.rank) >= messageRank
+      )
+      .map((receipt) => ({
+        userId: Number(receipt.userId),
+        name: receipt.name,
+        seenAt: formatSeenAt(receipt.seenAt),
+      }));
+  }
+
+  function hasBeenReadByEveryone(viewers) {
+    const otherMemberIds = (activeRoom?.memberIds || []).filter(
+      (memberId) => Number(memberId) !== Number(user.id),
+    );
+    return (
+      otherMemberIds.length > 0 &&
+      otherMemberIds.every((memberId) =>
+        viewers.some((viewer) => viewer.userId === Number(memberId)),
+      )
+    );
+  }
+
   function sendMessage(text) {
     const socket = socketRef.current;
     if (!activeRoomId || !socket?.connected) {
@@ -152,8 +303,60 @@ export default function ChatWindow({ canManage = false }) {
     }
     setError("");
     setSending(true);
-    socket.emit("send_message", { roomId: activeRoomId, text });
-    setSending(false);
+    const clientMessageId = crypto.randomUUID();
+    const pendingMessage = {
+      id: clientMessageId,
+      clientMessageId,
+      author: user.name || "Team member",
+      role: ROLE_LABELS[user.role] || user.role || "",
+      text,
+      senderId: user.id,
+      time: new Date().toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit",
+      }),
+      delivered: false,
+    };
+    setMessageState((current) =>
+      current.roomId === activeRoomId
+        ? { ...current, messages: [...current.messages, pendingMessage] }
+        : current,
+    );
+    socket.timeout(10000).emit(
+      "send_message",
+      { roomId: activeRoomId, text, clientMessageId },
+      (timeoutError, response) => {
+        setSending(false);
+        if (timeoutError || !response?.success) {
+          setMessageState((current) =>
+            current.roomId === activeRoomId
+              ? {
+                  ...current,
+                  messages: current.messages.filter(
+                    (message) => message.clientMessageId !== clientMessageId,
+                  ),
+                }
+              : current,
+          );
+          setError(
+            response?.message || "Message could not be sent. Please try again.",
+          );
+          return;
+        }
+        setMessageState((current) =>
+          current.roomId === activeRoomId
+            ? {
+                ...current,
+                messages: current.messages.map((message) =>
+                  message.clientMessageId === clientMessageId
+                    ? { ...message, delivered: true }
+                    : message,
+                ),
+              }
+            : current,
+        );
+      },
+    );
   }
 
   return (
@@ -225,7 +428,13 @@ export default function ChatWindow({ canManage = false }) {
                   messages.map((entry) => (
                     <div
                       className={`chat-message ${entry.author === user.name ? "chat-message-own" : ""}`}
+                      data-chat-message-id={entry.id}
                       key={entry.id}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        setMessageInfoId(entry.id);
+                      }}
+                      title="Right-click to view message info"
                     >
                       <div className="avatar avatar-small avatar-purple">
                         {initials(entry.author)}
@@ -237,6 +446,16 @@ export default function ChatWindow({ canManage = false }) {
                           <time>{entry.time}</time>
                         </div>
                         <p>{entry.text}</p>
+                        {Number(entry.senderId) === Number(user.id) && (
+                          <div className="mt-1 flex justify-end">
+                            <MessageTicks
+                              delivered={entry.delivered}
+                              readByAll={hasBeenReadByEveryone(
+                                seenByForMessage(entry.id),
+                              )}
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))
@@ -252,6 +471,43 @@ export default function ChatWindow({ canManage = false }) {
             <div className="empty-state">Select a group.</div>
           )}
         </section>
+      )}
+      {messageInfoId && (
+        <Modal
+          description="Read receipts for this message"
+          onClose={() => setMessageInfoId("")}
+          title="Message info"
+        >
+          <div className="grid gap-3 px-5 py-4">
+            <p className="m-0 text-sm text-slate-500">
+              {messages.find((message) => message.id === messageInfoId)?.text}
+            </p>
+            <h3 className="m-0 text-sm font-semibold text-slate-700">
+              Seen by
+            </h3>
+            {seenByForMessage(messageInfoId).length > 0 ? (
+              <ul className="m-0 grid list-none gap-2 p-0">
+                {seenByForMessage(messageInfoId).map((viewer) => (
+                  <li
+                    className="flex items-center justify-between gap-4 rounded-lg bg-slate-50 px-3 py-2 text-sm"
+                    key={viewer.userId}
+                  >
+                    <span className="font-medium text-slate-700">
+                      {viewer.name || "Team member"}
+                    </span>
+                    <span className="text-right text-xs text-slate-500">
+                      {viewer.seenAt || "Seen"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="m-0 rounded-lg bg-slate-50 px-3 py-3 text-sm text-slate-500">
+                No one has seen this message yet.
+              </p>
+            )}
+          </div>
+        </Modal>
       )}
     </>
   );

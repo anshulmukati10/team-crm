@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { DataTable, Icon, Modal, PageHeading, StatusBadge } from "../../components/ui/Navbar";
 import { useAuth } from "../../context/WorkspaceContext";
 import { createAdminLead, getAdminLeads, getAdminUsers } from "../admin/adminApi";
-import { getSalesLeads } from "./salesApi";
+import { getSalesLeads, updateLeadStatus } from "./salesApi";
 import { getAccountSales } from "../accounts/accountApi";
 import useWorkspaceUpdates from "../../context/useWorkspaceUpdates";
 
@@ -35,6 +35,7 @@ export default function Leads() {
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(role === "ADMIN");
   const [saving, setSaving] = useState(false);
+  const [updatingLeadId, setUpdatingLeadId] = useState("");
   const [error, setError] = useState("");
 
   const loadLeads = useCallback(async () => {
@@ -104,6 +105,23 @@ export default function Leads() {
     }
   }
 
+  async function handleLeadStatusChange(leadId, status) {
+    setUpdatingLeadId(leadId);
+    setError("");
+    try {
+      await updateLeadStatus(leadId, status);
+      setLeads((currentLeads) =>
+        currentLeads.map((lead) =>
+          lead.id === leadId ? { ...lead, status } : lead,
+        ),
+      );
+    } catch (updateError) {
+      setError(getErrorMessage(updateError));
+    } finally {
+      setUpdatingLeadId("");
+    }
+  }
+
   return (
     <>
       <PageHeading
@@ -168,7 +186,25 @@ export default function Leads() {
                   ...(role === "ACCOUNTS"
                     ? [<span>{lead.salesRepresentative}</span>]
                     : []),
-                  <StatusBadge status={lead.status} />,
+                  role === "SALES" ? (
+                    <select
+                      aria-label={`Update status for ${lead.name}`}
+                      className="min-h-9 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:cursor-wait disabled:opacity-60"
+                      disabled={updatingLeadId === lead.id}
+                      onChange={(event) =>
+                        handleLeadStatusChange(lead.id, event.target.value)
+                      }
+                      value={lead.status}
+                    >
+                      {["PENDING", "COMPLETED", "DECLINED"].map((status) => (
+                        <option key={status} value={status}>
+                          {status.charAt(0) + status.slice(1).toLowerCase()}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <StatusBadge status={lead.status} />
+                  ),
                   <span className="sku-text">{lead.id}</span>,
                 ],
               }))}

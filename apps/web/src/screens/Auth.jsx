@@ -7,7 +7,6 @@ export default function Auth({ mode = "signin" }) {
   return (
     <main className="auth-page">
       <Link className="brand auth-brand" to="/">
-        <span className="brand-mark">t</span>
         <span className="brand-name">
           team<span>crm</span>
         </span>

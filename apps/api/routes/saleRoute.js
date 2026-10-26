@@ -1,5 +1,5 @@
 import express from 'express'
-import { createOrder, getSalesLeads, getSalesOrders } from '../controller/saleController.js'
+import { createOrder, getSalesLeads, getSalesOrders, updateLeadStatus } from '../controller/saleController.js'
 import authMiddleware from "../middleware/authMiddleware.js"
 
 const router = express.Router();
@@ -7,5 +7,6 @@ const router = express.Router();
 router.post('/create-order' , authMiddleware , createOrder )
 router.get('/leads', authMiddleware, getSalesLeads)
 router.get('/orders', authMiddleware, getSalesOrders)
+router.put('/lead' , authMiddleware , updateLeadStatus )
 
 export default router ;
