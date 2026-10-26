@@ -52,7 +52,7 @@ if (fs.existsSync(swaggerSpecPath)) {
     app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, uiOptions))
     console.log(` swagger is live on  localhost:${PORT}/api-docs`)
 }
-app.use('/auth', userRoutes)
+app.use('/auth', ratelimiter( 3 , 120 ) , userRoutes)
 app.use('/admin', adminRoutes)
 app.use('/warehouse', wareHouseRoutes)
 app.use('/sales', salesRoutes)
