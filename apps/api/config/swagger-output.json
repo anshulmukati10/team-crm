@@ -51,7 +51,35 @@
         }
       }
     },
-    "/room/{roomId}/messages": {
+    "/chat/{id}/messages": {
+      "get": {
+        "description": "",
+        "responses": {
+          "default": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/profile": {
+      "get": {
+        "description": "",
+        "responses": {
+          "default": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "description": "",
+        "responses": {
+          "default": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/get-rooms": {
       "get": {
         "description": "",
         "responses": {
@@ -151,8 +179,16 @@
         }
       }
     },
-    "/create-room": {
+    "/room": {
       "post": {
+        "description": "",
+        "responses": {
+          "default": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
         "description": "",
         "responses": {
           "default": {
@@ -163,6 +199,26 @@
     },
     "/get-all-user": {
       "get": {
+        "description": "",
+        "responses": {
+          "default": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/balance": {
+      "get": {
+        "description": "",
+        "responses": {
+          "default": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/delete-room": {
+      "delete": {
         "description": "",
         "responses": {
           "default": {
@@ -223,6 +279,26 @@
     },
     "/create-order": {
       "post": {
+        "description": "",
+        "responses": {
+          "default": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/leads": {
+      "get": {
+        "description": "",
+        "responses": {
+          "default": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/orders": {
+      "get": {
         "description": "",
         "responses": {
           "default": {

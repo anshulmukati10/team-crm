@@ -1,63 +1,75 @@
-import axios from "axios";
-import { ROLES } from "../../context/WorkspaceContext";
+import axios from "axios"; import { ROLES } from "../../context/WorkspaceContext";
 
-const API_BASE = import.meta.env.VITE_API_URL?.replace(/\/+$/, "");
+axios.defaults.withCredentials = true;
 
-function getApi() {
-  if (!API_BASE) {
-    throw new Error("VITE_API_URL must be configured to load dashboard data.");
-  }
-  return axios.create({
-    baseURL: API_BASE,
-    withCredentials: true,
-  });
+const API_BASE = import.meta.env.VITE_API_URL; 
+const baseUrl =` ${API_BASE}`;
+
+export const getDashboardData = async (role) => {
+   try {
+     if (!API_BASE) {
+       throw new Error("VITE_API_URL must be configured to load dashboard data."); 
+      }
+
+    if (!Object.values(ROLES).includes(role)) {
+        throw new Error("Your account role is not supported for dashboard data.");
+    }
+
+    if (role === ROLES.SALES) {
+        const [leadsResponse, ordersResponse] = await Promise.all([
+            axios.get(`${baseUrl}/sales/leads`),
+            axios.get(`${baseUrl}/sales/orders`)
+        ]);
+
+        return {
+            leads: leadsResponse?.data,
+            orders: ordersResponse?.data
+        };
+    }
+
+    if (role === ROLES.ADMIN) {
+        const [leadsResponse, ordersResponse, productsResponse, requestsResponse] = await Promise.all([
+            axios.get(`${baseUrl}/admin/lead`),
+            axios.get(`${baseUrl}/warehouse/get-order-list`),
+            axios.get(`${baseUrl}/warehouse/get-stock-data`),
+            axios.get(`${baseUrl}/admin/get-request`)
+        ]);
+
+        return {
+            leads: leadsResponse?.data,
+            orders: ordersResponse?.data,
+            products: productsResponse?.data,
+            requests: requestsResponse?.data
+        };
+    }
+
+    if (role === ROLES.WAREHOUSE) {
+        const [ordersResponse, productsResponse, requestsResponse] = await Promise.all([
+            axios.get(`${baseUrl}/warehouse/get-order-list`),
+            axios.get(`${baseUrl}/warehouse/get-stock-data`),
+            axios.get(`${baseUrl}/warehouse/get-req-list`)
+        ]);
+
+        return {
+            orders: ordersResponse?.data,
+            products: productsResponse?.data,
+            requests: requestsResponse?.data
+        };
+    }
+
+    if (role === ROLES.ACCOUNTS) {
+        const response = await axios.get(`${baseUrl}/accounts/sales-list`);
+
+        return {
+            sales: response?.data
+        };
+    }
+
+    throw new Error("No dashboard data source is configured for this role.");
+
+} catch (error) {
+    throw error?.response?.data?.message || error?.message || "Failed to fetch dashboard data";
 }
 
-async function getArray(api, path, label) {
-  const response = await api.get(path);
-  if (!Array.isArray(response.data)) {
-    throw new Error(`The API returned invalid ${label} data.`);
-  }
-  return response.data;
-}
 
-export async function getDashboardData(role) {
-  if (!Object.values(ROLES).includes(role)) {
-    throw new Error("Your account role is not supported for dashboard data.");
-  }
-
-  const api = getApi();
-  if (role === ROLES.SALES) {
-    const [leads, orders] = await Promise.all([
-      getArray(api, "/sales/leads", "lead"),
-      getArray(api, "/sales/orders", "order"),
-    ]);
-    return { leads, orders };
-  }
-
-  if (role === ROLES.ADMIN) {
-    const [leads, orders, products, requests] = await Promise.all([
-      getArray(api, "/admin/lead", "lead"),
-      getArray(api, "/warehouse/get-order-list", "order"),
-      getArray(api, "/warehouse/get-stock-data", "inventory"),
-      getArray(api, "/admin/get-request", "request"),
-    ]);
-    return { leads, orders, products, requests };
-  }
-
-  if (role === ROLES.WAREHOUSE) {
-    const [orders, products, requests] = await Promise.all([
-      getArray(api, "/warehouse/get-order-list", "order"),
-      getArray(api, "/warehouse/get-stock-data", "inventory"),
-      getArray(api, "/warehouse/get-req-list", "request"),
-    ]);
-    return { orders, products, requests };
-  }
-
-  if (role === ROLES.ACCOUNTS) {
-    const sales = await getArray(api, "/accounts/sales-list", "sales");
-    return { sales };
-  }
-
-  throw new Error("No dashboard data source is configured for this role.");
-}
+};

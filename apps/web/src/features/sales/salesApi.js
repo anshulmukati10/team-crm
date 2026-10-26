@@ -1,55 +1,40 @@
+
 import axios from "axios";
 
-const API_BASE = import.meta.env.VITE_API_URL?.replace(/\/+$/, "");
+axios.defaults.withCredentials = true;
 
-function getSalesApi() {
-  if (!API_BASE) {
-    throw new Error("VITE_API_URL must be configured to use sales features.");
-  }
-  return axios.create({
-    baseURL: `${API_BASE}/sales`,
-    withCredentials: true,
-  });
-}
+const API_BASE = import.meta.env.VITE_API_URL;
+const baseUrl = `${API_BASE}/sales`;
 
-export async function createSalesOrder(order) {
-  try {
-    const response = await getSalesApi().post("/create-order", order);
-    return response.data;
-  } catch (error) {
-    throw new Error(
-      error?.response?.data?.message || error?.message || "Unable to create this order.",
-      { cause: error },
-    );
-  }
-}
 
-export async function getSalesLeads() {
-  try {
-    const response = await getSalesApi().get("/leads");
-    if (!Array.isArray(response.data)) {
-      throw new Error("The API returned invalid lead data.");
+export const createSalesOrder = async (order) => {
+    try {
+        const response = await axios.post(
+            `${baseUrl}/create-order`,
+            order
+        );
+        return response?.data;
+    } catch (error) {
+        throw error?.response?.data?.message || "Unable to create this order.";
     }
-    return response.data;
-  } catch (error) {
-    throw new Error(
-      error?.response?.data?.message || error?.message || "Unable to load leads.",
-      { cause: error },
-    );
-  }
-}
+};
 
-export async function getSalesOrders() {
-  try {
-    const response = await getSalesApi().get("/orders");
-    if (!Array.isArray(response.data)) {
-      throw new Error("The API returned invalid order data.");
+
+export const getSalesLeads = async () => {
+    try {
+        const response = await axios.get(`${baseUrl}/leads`);
+        return response?.data;
+    } catch (error) {
+        throw error?.response?.data?.message || "Unable to load leads.";
     }
-    return response.data;
-  } catch (error) {
-    throw new Error(
-      error?.response?.data?.message || error?.message || "Unable to load orders.",
-      { cause: error },
-    );
-  }
-}
+};
+
+
+export const getSalesOrders = async () => {
+    try {
+        const response = await axios.get(`${baseUrl}/orders`);
+        return response?.data;
+    } catch (error) {
+        throw error?.response?.data?.message || "Unable to load orders.";
+    }
+};
