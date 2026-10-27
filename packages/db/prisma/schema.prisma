@@ -38,6 +38,18 @@ enum paymentStatus {
     FAIL
 }
 
+enum planType{
+    FREE
+    PRO
+}
+
+enum planStatus{
+    ACTIVE
+    CANCEL
+    EXPIRE
+    INACTIVE
+}
+
 model User {
     id Int @id @default(autoincrement())
     name String 
@@ -52,6 +64,18 @@ model User {
     message Message[]
     group GroupMember[]
     payment Payment[] 
+    memberOf String  @unique
+    company Company  @relation(fields : [memberOf] , references : [id])
+}
+
+model Company {
+    id        String  @id @default(uuid())
+    name String 
+    member User[]
+    order Order[]
+    balance Wallet?
+    planId String 
+    plan Plan @relation(fields : [planId] , references : [id])
 }
 
 model Lead {
@@ -84,6 +108,8 @@ model Order {
     leadId String
     lead Lead @relation(fields : [leadId] , references : [id])
     orderItems OrderItem[]
+    orderOf String 
+    company Company @relation(fields : [orderOf]  , references : [id])
 }
  
  model OrderItem {
@@ -109,6 +135,8 @@ model Wallet {
   balance   Int      @default(0) 
   userId    Int      @unique
   user      User     @relation(fields: [userId], references: [id])
+  balanceOf String   @unique
+  company Company  @relation(fields : [balanceOf]  , references : [id])
 }
 
 model Request {
@@ -163,4 +191,28 @@ model Payment {
     createdAt DateTime @default(now())
 
     @@index([userId , createdAt])
+}
+
+model Plan{
+    id String @id @default(uuid())
+    name String @unique
+    price Int 
+    isActive Boolean 
+    details Details?
+    type planType @default(FREE)
+    companies Company[]
+    status planStatus @default(INACTIVE)
+
+    createdAt DateTime @default(now())
+    
+    @@index([createdAt , id])
+}
+
+model Details{
+    id String @id @default(uuid())
+    maxMember Int 
+    maxOrder Int
+    maxWallet Int 
+    planId String @unique
+    plan Plan @relation(fields : [planId] , references : [id])
 }

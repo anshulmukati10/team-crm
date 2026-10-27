@@ -30,6 +30,7 @@ The Prisma schema in [`packages/db/prisma/schema.prisma`](./packages/db/prisma/s
 - **Request** — a warehouse stock/import request with amount, note, status, and associated products.
 - **Wallet and Expenses** — account balance and recorded amounts associated with users.
 - **Room, GroupMember, and Message** — group chat rooms, membership, and messages.
+- **Payment** — a user-linked payment record with amount, currency, a pending/success/failure status, and an optional Stripe PaymentIntent ID.
 
 ## Roles and intended permissions
 
@@ -71,6 +72,7 @@ Before production use, enforce roles and resource ownership on the server for ev
 5. An administrator reviews a replenishment request and approves or rejects it based on available funds.
 6. Accounts staff review balance and sales-related financial activity.
 7. An administrator creates chat rooms and adds team members; room members communicate in chat.
+8. An administrator can initialize a payment through the payment API. Stripe payment-intent webhook events update the corresponding payment record.
 
 The API contains operations for these workflows, but some screens and authorization checks are incomplete. Treat the steps as the intended product flow, not proof that every workflow is complete end-to-end in the UI.
 
@@ -202,8 +204,34 @@ apps/web/src/
 | `/sales` | Create sales orders |
 | `/warehouse` | Read stock/order data, fulfill orders, and submit/read stock-import requests |
 | `/accounts` | Read balance and sales-related records |
+| `/payment` | Initialize a payment at `POST /payment/make-payment`; the Stripe webhook is registered directly as `POST /payment/webhook` |
 
 Exact routes and middleware are defined in [`apps/api/routes/`](./apps/api/routes/). The warehouse route group also has a rate limiter. Chat uses Socket.IO in addition to the message-retrieval endpoint.
+
+## Stripe payments and webhook
+
+The payment API creates a local `Payment` record and a Stripe PaymentIntent. The webhook handler processes `payment_intent.succeeded` and `payment_intent.payment_failed` to update the local payment status. The current payment initialization route requires authentication and the admin middleware.
+
+The webhook is registered directly in [`apps/api/src/index.js`](./apps/api/src/index.js) as `POST /payment/webhook`, before the general JSON parser, with `express.raw({ type: 'application/json' })`. Preserve this ordering: Stripe signature verification needs the exact raw request bytes. The handler in [`apps/api/controller/paymentController.js`](./apps/api/controller/paymentController.js) verifies the signature using `STRIPE_WEBHOOK_SECRET`.
+
+For local Stripe CLI testing, start the API and run:
+
+```powershell
+stripe listen --forward-to http://localhost:8000/payment/webhook
+```
+
+Set `STRIPE_WEBHOOK_SECRET` in `apps/api/.env` to the `whsec_...` secret printed by that CLI listener, then restart the API. This CLI signing secret is distinct from the secret for the configured ngrok/Dashboard endpoint. When Stripe sends events directly to `https://wish-sway-imagines.ngrok-free.dev/payment/webhook`, use the signing secret shown for that endpoint in Stripe Dashboard instead. Keep signing secrets private; do not commit `.env` files or copy secret values into documentation.
+
+The configured ngrok tunnel forwards to port `8000` and uses the `wish-sway-imagines.ngrok-free.dev` domain; see [`apps/api/config/ngrok.js`](./apps/api/config/ngrok.js). Ensure the tunnel is active and the Stripe endpoint URL uses the exact `/payment/webhook` path. The Stripe CLI option is `--forward-to` (hyphens), not `--forward_to`.
+
+## Related payment implementation
+
+- Payment schema and statuses: [`packages/db/prisma/schema.prisma`](./packages/db/prisma/schema.prisma)
+- Payment initialization route: [`apps/api/routes/paymentRoute.js`](./apps/api/routes/paymentRoute.js)
+- Payment creation and webhook processing: [`apps/api/controller/paymentController.js`](./apps/api/controller/paymentController.js)
+- Stripe SDK configuration: [`apps/api/config/stripe.js`](./apps/api/config/stripe.js)
+- Webhook route registration and raw-body middleware: [`apps/api/src/index.js`](./apps/api/src/index.js)
+- Ngrok forwarding configuration: [`apps/api/config/ngrok.js`](./apps/api/config/ngrok.js)
 
 ## Related implementation
 

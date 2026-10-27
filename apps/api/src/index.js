@@ -15,8 +15,10 @@ import path from 'path'
 import { createServer } from "http";
 import { socketInit } from "../config/socket.js";
 import cors from 'cors'
+import { forwardToApp  } from "../config/ngrok.js"; 
 
 import "../config/worker.js"
+import { stripeWebhookHandler  } from "../controller/paymentController.js";
 
 
 
@@ -24,11 +26,13 @@ import "../config/worker.js"
 const app = express();
 
 start();
+
 const corsOptions = {
     origin: process.env.FRONTEND_URL,
     credentials: true,
 };
 const PORT = 8000;
+app.post('/payment/webhook' , express.raw({ type : 'application/json'}) , stripeWebhookHandler)
 app.use(express.json())
 app.use(cookieParser())
 app.use(cors(corsOptions));
@@ -60,9 +64,11 @@ app.use('/warehouse', wareHouseRoutes)
 app.use('/sales', salesRoutes)
 app.use('/accounts', accountRoutes)
 app.use('/payment' , paymentRoutes)
-
+ 
 
 
 httpServer.listen(PORT, () => {
     console.log(`server is running on port ${PORT}`)
 })
+
+forwardToApp();
