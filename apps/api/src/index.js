@@ -8,6 +8,7 @@ import wareHouseRoutes from "../routes/warehouseRoute.js";
 import accountRoutes from "../routes/accountRoute.js"
 import salesRoutes from '../routes/saleRoute.js'
 import swaggerUi from 'swagger-ui-express'
+import paymentRoutes from '../routes/paymentRoute.js'
 import fs from 'fs'
 import { fileURLToPath } from "url";
 import path from 'path'
@@ -58,6 +59,7 @@ app.use('/admin', adminRoutes)
 app.use('/warehouse', wareHouseRoutes)
 app.use('/sales', salesRoutes)
 app.use('/accounts', accountRoutes)
+app.use('/payment' , paymentRoutes)
 
 
 

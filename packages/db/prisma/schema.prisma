@@ -32,6 +32,12 @@ enum reqStatus {
     APPROVED
 }
 
+enum paymentStatus {
+    PENDING
+    SUCCESS
+    FAIL
+}
+
 model User {
     id Int @id @default(autoincrement())
     name String 
@@ -45,6 +51,7 @@ model User {
     wallet Wallet?
     message Message[]
     group GroupMember[]
+    payment Payment[] 
 }
 
 model Lead {
@@ -143,4 +150,17 @@ model GroupMember {
     user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
     @@unique([roomId, userId]) 
+}
+
+model Payment {
+    id String @id @default(cuid())
+    userId Int 
+    amount Int 
+    currency String @default("usd")
+    status paymentStatus @default(PENDING)
+    stripeIntentsId String? 
+    user User @relation(fields : [userId] , references :[id])
+    createdAt DateTime @default(now())
+
+    @@index([userId , createdAt])
 }
