@@ -6,7 +6,6 @@ import adminRoutes from "../routes/adminRoutes/adminRoutes.js"
 import { start } from "../config/db.js";
 import wareHouseRoutes from "../routes/warehouseRoute.js";
 import accountRoutes from "../routes/accountRoute.js"
-import rateLimiter from '../middleware/redisMiddleware.js';
 import salesRoutes from '../routes/saleRoute.js'
 import swaggerUi from 'swagger-ui-express'
 import fs from 'fs'
@@ -15,6 +14,8 @@ import path from 'path'
 import { createServer } from "http";
 import { socketInit } from "../config/socket.js";
 import cors from 'cors'
+
+import "../config/worker.js"
 
 
 
@@ -52,11 +53,13 @@ if (fs.existsSync(swaggerSpecPath)) {
     app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, uiOptions))
     console.log(` swagger is live on  localhost:${PORT}/api-docs`)
 }
-app.use('/auth', ratelimiter( 3 , 120 ) , userRoutes)
+app.use('/auth', userRoutes)
 app.use('/admin', adminRoutes)
 app.use('/warehouse', wareHouseRoutes)
 app.use('/sales', salesRoutes)
 app.use('/accounts', accountRoutes)
+
+
 
 httpServer.listen(PORT, () => {
     console.log(`server is running on port ${PORT}`)

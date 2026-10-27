@@ -7,7 +7,7 @@ import {
   PageHeading,
 } from "../../components/ui/Navbar";
 import { ROLE_LABELS, useAuth } from "../../context/WorkspaceContext";
-import { getMessages, getRooms } from "./chatApi";
+import {  getRooms } from "./chatApi";
 import MessageInput from "./messageInput";
 import useWorkspaceUpdates from "../../context/useWorkspaceUpdates";
 
@@ -32,9 +32,9 @@ function normalizeMessage(entry, delivered = true) {
     delivered,
     time: entry.createdAt
       ? new Date(entry.createdAt).toLocaleTimeString([], {
-          hour: "numeric",
-          minute: "2-digit",
-        })
+        hour: "numeric",
+        minute: "2-digit",
+      })
       : "",
   };
 }
@@ -150,88 +150,108 @@ export default function ChatWindow({ canManage = false }) {
   }, [workspaceVersion]);
 
   useEffect(() => {
-    if (!activeRoomId) return undefined;
-    if (!API_BASE) return undefined;
+    if (!activeRoomId || !API_BASE) return;
 
     let active = true;
-    Promise.resolve()
-      .then(() => {
-        if (!active) return undefined;
-        setError("");
-        setLoadingMessages(true);
-        return getMessages(activeRoomId);
-      })
-      .then((result) => {
-        if (active && result) {
-          setMessageState({
-            roomId: activeRoomId,
-            messages: Array.isArray(result)
-              ? result.map((entry) => normalizeMessage(entry))
-              : [],
-          });
-        }
-      })
-      .catch((loadError) => {
-        if (active) setError(getErrorMessage(loadError));
-      })
-      .finally(() => {
-        if (active) setLoadingMessages(false);
-      });
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setError("");
+    setLoadingMessages(true);
     seenMessageIdsRef.current.clear();
+    setReceiptState({ roomId: activeRoomId, receipts: [] });
+
     const socket = io(API_BASE, { withCredentials: true });
     socketRef.current = socket;
-    socket.on("connect", () => socket.emit("join_room", activeRoomId));
-    socket.on("receive_message", (entry) => {
-      if (active) {
-        const receivedMessage = normalizeMessage(entry);
-        setMessageState((current) =>
-          current.roomId === activeRoomId
-            ? {
-                ...current,
-                messages: entry.clientMessageId &&
-                  current.messages.some(
-                    (message) =>
-                      message.clientMessageId === entry.clientMessageId,
-                  )
-                    ? current.messages.map((message) =>
-                        message.clientMessageId === entry.clientMessageId
-                          ? receivedMessage
-                          : message,
-                      )
-                    : [...current.messages, receivedMessage],
+
+    socket.on("connect", () => {
+      socket.emit("join_room", activeRoomId, (response) => {
+        if (!active) return;
+
+        if (!response?.success) {
+          setError(response?.error || "Unable to load this group.");
+        } else {
+          const history = (response.messages || []).map((entry) =>
+            normalizeMessage(entry)
+          );
+          setMessageState((current) => {
+            const messages = [...history];
+            const liveMessages =
+              current.roomId === activeRoomId ? current.messages : [];
+
+            liveMessages.forEach((message) => {
+              const existingIndex = messages.findIndex(
+                (entry) =>
+                  entry.id === message.id ||
+                  (message.clientMessageId &&
+                    entry.clientMessageId === message.clientMessageId),
+              );
+              if (existingIndex >= 0) {
+                messages[existingIndex] = message;
+              } else {
+                messages.push(message);
               }
-            : current,
+            });
+
+            return { roomId: activeRoomId, messages };
+          });
+        }
+
+        setLoadingMessages(false);
+      });
+    });
+
+    socket.on("receive_message", (entry) => {
+      if (!active) return;
+
+      const incoming = normalizeMessage(entry);
+
+      setMessageState((current) => {
+        if (current.roomId !== activeRoomId) {
+          return { roomId: activeRoomId, messages: [incoming] };
+        }
+
+        const existingIndex = current.messages.findIndex(
+          (message) =>
+            message.id === incoming.id ||
+            (incoming.clientMessageId &&
+              message.clientMessageId === incoming.clientMessageId),
         );
-      }
+        if (existingIndex >= 0) {
+          const updatedMessages = [...current.messages];
+          updatedMessages[existingIndex] = incoming;
+          return { ...current, messages: updatedMessages };
+        }
+
+        return {
+          ...current,
+          messages: [...current.messages, incoming],
+        };
+      });
     });
-    socket.on("receipts_sync", (sync) => {
-      if (active && String(sync.roomId) === String(activeRoomId)) {
-        setReceiptState({
-          roomId: activeRoomId,
-          receipts: Array.isArray(sync.receipts) ? sync.receipts : [],
-        });
-      }
+
+    socket.on("receipts_sync", ({ roomId, receipts: syncedReceipts }) => {
+      if (!active || roomId !== activeRoomId || !Array.isArray(syncedReceipts)) return;
+      setReceiptState({ roomId, receipts: syncedReceipts });
     });
-    socket.on("receipts_updated", (update) => {
-      if (active && String(update.roomId) === String(activeRoomId)) {
-        setReceiptState({
-          roomId: activeRoomId,
-          receipts: Array.isArray(update.receipts) ? update.receipts : [],
-        });
-      }
+
+    socket.on("receipts_updated", ({ roomId, receipts: updatedReceipts }) => {
+      if (!active || roomId !== activeRoomId || !Array.isArray(updatedReceipts)) return;
+      setReceiptState({ roomId, receipts: updatedReceipts });
     });
-    socket.on("room_error", (message) => {
-      if (active) setError(String(message));
-    });
-    socket.on("connect_error", (connectError) => {
-      if (active) setError(getErrorMessage(connectError));
+
+    socket.on("connect_error", (err) => {
+      if (!active) return;
+      setError(getErrorMessage(err));
+      setLoadingMessages(false);
     });
 
     return () => {
       active = false;
       socket.disconnect();
-      if (socketRef.current === socket) socketRef.current = null;
+
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+      }
     };
   }, [activeRoomId]);
 
@@ -331,11 +351,11 @@ export default function ChatWindow({ canManage = false }) {
           setMessageState((current) =>
             current.roomId === activeRoomId
               ? {
-                  ...current,
-                  messages: current.messages.filter(
-                    (message) => message.clientMessageId !== clientMessageId,
-                  ),
-                }
+                ...current,
+                messages: current.messages.filter(
+                  (message) => message.clientMessageId !== clientMessageId,
+                ),
+              }
               : current,
           );
           setError(
@@ -346,13 +366,13 @@ export default function ChatWindow({ canManage = false }) {
         setMessageState((current) =>
           current.roomId === activeRoomId
             ? {
-                ...current,
-                messages: current.messages.map((message) =>
-                  message.clientMessageId === clientMessageId
-                    ? { ...message, delivered: true }
-                    : message,
-                ),
-              }
+              ...current,
+              messages: current.messages.map((message) =>
+                message.clientMessageId === clientMessageId
+                  ? { ...message, delivered: true }
+                  : message,
+              ),
+            }
             : current,
         );
       },

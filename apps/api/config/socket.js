@@ -2,6 +2,7 @@ import { prisma } from "./prismaClient.js";
 import { Server } from 'socket.io'
 import jwt from 'jsonwebtoken'
 import { getRoomReceipts, updateUserReceipt } from './readReceipts.js'
+import chatHandler from "./chatHandler.js";
 
 let io;
 
@@ -36,40 +37,45 @@ export const socketInit = (httpServer) => {
             credentials: true
         },
     })
-
-    io.use((socket, next) => {
-        try {
-            const cookie = socket.handshake.headers.cookie || '';
-            const token = cookie
-                .split(';')
-                .map((item) => item.trim())
-                .find((item) => item.startsWith('token='))?.split('=')[1];
-
-            if (!token) return next(new Error('Not authorized'));
-            socket.data.user = jwt.verify(token, process.env.JWT_SECRET);
-            next();
-        } catch {
-            next(new Error('Not authorized'));
-        }
-    });
-
     io.on('connection', (socket) => {
+        chatHandler(io, socket);
         console.log(`User is connected to socket ${socket.id}`)
-        socket.on('join_room', async (roomId) => {
-            const member = await prisma.groupMember.findUnique({
-                where: {
-                    roomId_userId : {
-                        userId: Number(socket.data.user.id),
-                        roomId
-                    }
+        socket.on('join_room', async (roomId, acknowledge) => {
+            try {
+                if (typeof roomId !== 'string' || !roomId) {
+                    return acknowledge?.({ success: false, error: 'Invalid chat room' });
                 }
-            });
-            if (!member) return socket.emit('room_error', 'You are not a member of this room');
-            socket.join(roomId)
-            socket.emit('receipts_sync', {
-                roomId,
-                receipts: await getAuthorizedReceiptState(roomId)
-            })
+
+                const member = await prisma.groupMember.findUnique({
+                    where: {
+                        roomId_userId: {
+                            userId: Number(socket.data.user.id),
+                            roomId
+                        }
+                    }
+                });
+                if (!member) {
+                    return acknowledge?.({
+                        success: false,
+                        error: 'You are not a member of this room'
+                    });
+                }
+
+                const messages = await prisma.message.findMany({
+                    where: { roomId },
+                    include: {
+                        user: { select: { name: true, role: true } }
+                    },
+                    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }]
+                });
+                socket.join(roomId);
+                const receipts = await getAuthorizedReceiptState(roomId);
+                socket.emit('receipts_sync', { roomId, receipts });
+                acknowledge?.({ success: true, messages });
+            } catch (error) {
+                console.error('Unable to join chat room:', error);
+                acknowledge?.({ success: false, error: 'Unable to load this group.' });
+            }
         })
         socket.on('mark_message_seen', async ({ roomId, messageId }) => {
             const userId = Number(socket.data.user.id)
@@ -102,63 +108,31 @@ export const socketInit = (httpServer) => {
                 console.error('Unable to update read receipt:', error)
             }
         })
-        socket.on('send_message', async (data, acknowledge) => {
-            const { text, roomId, clientMessageId } = data;
-            const userId = Number(socket.data.user.id);
-            try {
-                const member = await prisma.groupMember.findUnique({
-                    where: {
-                        roomId_userId: { userId, roomId }
-                    }
-                });
-                if (!member) {
-                    const message = 'You are not a member of this room';
-                    socket.emit('room_error', message);
-                    if (typeof acknowledge === 'function') {
-                        acknowledge({ success: false, message });
-                    }
-                    return;
-                }
-
-                const newMessage = await prisma.message.create({
-                    data: { text, userId, roomId }, include: {
-                        user: {
-                            select : {
-                                name : true,
-                                role : true 
-                            }
-                        }
-                    }
-                })
-
-                io.to(roomId).emit('receive_message', {
-                    ...newMessage,
-                    clientMessageId
-                });
-                if (typeof acknowledge === 'function') {
-                    acknowledge({ success: true });
-                }
-
-            } catch (error) {
-                console.error("Unable to send chat message:", error);
-                if (typeof acknowledge === 'function') {
-                    acknowledge({
-                        success: false,
-                        message: 'Unable to send message. Please try again.'
-                    });
-                }
-            }
-
-        });
         socket.on('disconnect', () => {
             console.log(`User is disconnected on ${socket.id}`)
         })
 
     })
 
+    io.use((socket, next) => {
+        try {
+            const cookie = socket.handshake.headers.cookie || '';
+            const token = cookie
+                .split(';')
+                .map((item) => item.trim())
+                .find((item) => item.startsWith('token='))?.split('=')[1];
+
+            if (!token) return next(new Error('Not authorized'));
+            socket.data.user = jwt.verify(token, process.env.JWT_SECRET);
+            next();
+        } catch {
+            next(new Error('Not authorized'));
+        }
+    });
 
     return io;
 }
+
 
 export const getIo = () => {
     if (!io) {
