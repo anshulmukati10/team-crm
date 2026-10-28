@@ -31,16 +31,26 @@ export const createCompany = asyncHandler(async (req, res) => {
             });
         }
         const hashedPass = await bcrypt.hash(password, 10)
-        const company = await prisma.company.create(
-            {
-                data:
-                {
+        const company = await prisma.$transaction(async (tx) => {
+            const createdCompany = await tx.company.create({
+                data: {
                     email,
                     password: hashedPass,
                     name,
-                    planId: freePlan.id
-                }
-            })
+                    planId: freePlan.id,
+                },
+            });
+
+            await tx.subscription.create({
+                data: {
+                    companyId: createdCompany.id,
+                    planId: freePlan.id,
+                    status: "ACTIVE",
+                },
+            });
+
+            return createdCompany;
+        });
         return res.status(201).json({ message: ` company registered  ${company.id}` })
     }
     catch (err) {

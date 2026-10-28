@@ -18,11 +18,9 @@ import { createServer } from "http";
 import { socketInit } from "../config/socket.js";
 import cors from 'cors'
 import { forwardToApp  } from "../config/ngrok.js"; 
-
+import '../jobs/expireSubscriptionHandler.js'
 import "../config/worker.js"
 import { stripeWebhookHandler  } from "../controller/paymentController.js";
-
-
 
 
 const app = express();

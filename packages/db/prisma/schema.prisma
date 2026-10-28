@@ -63,7 +63,6 @@ model User {
     wallet Wallet?
     message Message[]
     group GroupMember[]
-    payment Payment[] 
     memberOf String  
     company Company  @relation(fields : [memberOf] , references : [id])
 }
@@ -186,19 +185,17 @@ model GroupMember {
 
 model Payment {
     id String @id @default(cuid())
-    userId Int 
     amount Int 
     currency String @default("usd")
     status paymentStatus @default(PENDING)
     stripeIntentsId String? 
-    user User @relation(fields : [userId] , references :[id])
     createdAt DateTime @default(now())
     companyId       String?
     planId          String?
     company         Company?      @relation(fields: [companyId], references: [id])
     plan            Plan?         @relation(fields: [planId], references: [id])
    
-    @@index([userId , createdAt])
+    @@index([companyId , planId , createdAt])
 }
 
 model Plan{

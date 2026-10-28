@@ -99,6 +99,7 @@ export const createPlan = async (req, res) => {
 export const getPlans = async (req, res) => {
   try {
     const plans = await prisma.plan.findMany({
+      where : { isActive :  true } , 
       include: {
         details: true,
       },
