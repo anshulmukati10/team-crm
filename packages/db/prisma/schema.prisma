@@ -4,6 +4,7 @@ datasource db {
 
 generator client {
     provider = "prisma-client-js"
+
 }
 
 
@@ -60,15 +61,14 @@ model User {
     orders Order[]
     expenses Expenses[]
     request Request[]
-    wallet Wallet?
     message Message[]
     group GroupMember[]
-    memberOf String  
-    company Company  @relation(fields : [memberOf] , references : [id])
+    memberOf String?  
+    company Company?  @relation(fields : [memberOf] , references : [id])
 }
 
 model Company {
-    id        String  @id @default(uuid())
+    id   String  @id @default(uuid())
     name String 
     email String @unique 
     password String 
@@ -136,8 +136,6 @@ model Expenses {
 model Wallet {
   id        Int      @id @default(autoincrement())
   balance   Int      @default(0) 
-  userId    Int      @unique
-  user      User     @relation(fields: [userId], references: [id])
   balanceOf String   @unique
   company Company  @relation(fields : [balanceOf]  , references : [id])
 }
@@ -217,7 +215,7 @@ model Details{
     id String @id @default(uuid())
     maxMember Int 
     maxOrder Int
-    maxWallet Int 
+    balance Int @default(50000)
     planId String @unique
     plan Plan @relation(fields : [planId] , references : [id])
 }

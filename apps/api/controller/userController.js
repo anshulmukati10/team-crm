@@ -9,8 +9,9 @@ import { emitWorkspaceUpdate } from '../config/socket.js'
 
 export const createUSer = asyncHandler(async (req, res) => {
     try {
-        const { name, email, password, role } = req.body;
-        if (!name || !email || !password || !role) {
+        const { name, email, password, role  } = req.body;
+        // console.log(name, email, password, role , company)
+        if ((!name || !email || !password || !role ) ){
             return res.status(400).json({ message: " all fields required " })
         }
         const userExist = await prisma.user.findUnique({ where: { email: email } });
@@ -25,7 +26,7 @@ export const createUSer = asyncHandler(async (req, res) => {
                     name: name,
                     email: email,
                     password: hashedPass,
-                    role: role.toUpperCase()
+                    role: role.toUpperCase(),
                 },
                 select:
                 {
@@ -41,6 +42,7 @@ export const createUSer = asyncHandler(async (req, res) => {
 
     }
     catch (err) {
+        console.log(err)
         return res.status(500).json({ error: err })
     }
 })

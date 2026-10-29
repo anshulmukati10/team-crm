@@ -108,7 +108,7 @@ export const createOrder = asyncHandler(async (req, res) => {
                 productId: product.id
             })
         }
-
+        
         await prisma.order.create({
             data: {
                 id: `ORD_${Date.now()}`,

@@ -69,7 +69,6 @@ app.use("/company" , companyRoute );
 
  
 
-
 httpServer.listen(PORT, () => {
     console.log(`server is running on port ${PORT}`)
 })

@@ -277,30 +277,64 @@ export const handleRequest = asyncHandler(async (req, res) => {
 
 export const creditAmount = asyncHandler(async (req, res) => {
     try {
-        const { id } = req.user
-        const numericId = Number.parseInt(id)
-        const { amount } = req.body
-        const user = await prisma.user.findUnique({ where: { id: numericId } })
+        const companyId = req.query.id;
+        const balance = Number(req.body.balance);
 
-        await prisma.expenses.create({
-            data: {
-                id: `EXP_${crypto.randomUUID()}`,
-                amount: amount,
-                userId: numericId
-            }
-        })
-        await prisma.wallet.upsert({
-            where: { userId: numericId },
-            update: { balance: { increment: amount } },
-            create: { userId: numericId, balance: amount }
-        })
-        emitWorkspaceUpdate()
-        return res.status(201).json({ message: ` transaction done by ${user.name} of $ ${amount}` })
+        if (!companyId) {
+            return res.status(400).json({
+                message: "Company ID is required",
+            });
+        }
+
+        if (!Number.isSafeInteger(balance) || balance <= 0) {
+            return res.status(400).json({
+                message: "Balance must be a positive integer",
+            });
+        }
+
+        const company = await prisma.company.findUnique({
+            where: { id: companyId },
+            select: {
+                id: true,
+                name: true,
+            },
+        });
+
+        if (!company) {
+            return res.status(404).json({
+                message: "Company not found",
+            });
+        }
+
+        const wallet = await prisma.wallet.upsert({
+            where: {
+                balanceOf: companyId,
+            },
+            update: {
+                balance: {
+                    increment: balance,
+                },
+            },
+            create: {
+                balanceOf: companyId,
+                balance,
+            },
+        });
+
+        emitWorkspaceUpdate();
+
+        return res.status(200).json({
+            message: `Successfully credited ${balance} to ${company.name}'s wallet`,
+            wallet,
+        });
     } catch (error) {
-        console.log(error)
-        return res.status(500).json({ message: " Server Down Try Again Later" })
+        console.error("Credit amount error:", error);
+
+        return res.status(500).json({
+            message: "Unable to credit wallet",
+        });
     }
-})
+});
 
 export const createRoom = asyncHandler(async (req, res) => {
     try {
@@ -367,12 +401,12 @@ export const removeMember = asyncHandler(async (req, res) => {
         if (!membership) {
             return res.status(404).json({ message: "Member not found in room" })
         }
-        
-        const user  = await prisma.user.findUnique({ where: { id: Number(memberId),} })
+
+        const user = await prisma.user.findUnique({ where: { id: Number(memberId), } })
         if (!user) {
             return res.status(404).json({ message: "user not found" })
         }
-        if(user.role === 'ADMIN') return res.status(404).json({ message: " admin cant be removed " })
+        if (user.role === 'ADMIN') return res.status(404).json({ message: " admin cant be removed " })
 
         await prisma.groupMember.delete({
             where: {
@@ -400,7 +434,8 @@ export const getAllUsers = asyncHandler(async (req, res) => {
                 id: true,
                 name: true,
                 email: true,
-                role: true
+                role: true,
+                memberOf: true
             },
             where:
             {
@@ -481,32 +516,33 @@ export const addUserToGroup = asyncHandler(async (req, res) => {
             }
         })
         if (!room) return res.json({ message: " room is missing  " })
-            const user = await prisma.user.findUnique({
+        const user = await prisma.user.findUnique({
             where:
             {
                 id: numericUserId,
             }
         })
         if (!user) return res.json({ message: " room is missing  " })
-        
-        await prisma.groupMember.upsert({ where :
+
+        await prisma.groupMember.upsert({
+            where:
             {
-                roomId_userId :
+                roomId_userId:
                 {
-                    roomId , 
-                    userId : numericUserId
+                    roomId,
+                    userId: numericUserId
                 }
             },
-            update : {},
-            create :
+            update: {},
+            create:
             {
-                roomId ,
-                userId : numericUserId ,
-            }   
+                roomId,
+                userId: numericUserId,
+            }
         })
         emitWorkspaceUpdate()
         return res.status(200).json({ message: "member added to group" })
-        
+
     } catch (error) {
         console.log(error)
         return res.status(500).json({ message: " Server error in adding member inside group " })

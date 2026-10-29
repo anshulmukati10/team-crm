@@ -13,7 +13,7 @@ import admin from "../middleware/adminMiddleware.js";
 const router = Router();
 
 
-router.post("/", createPlan);
+router.post("/", createPlan); 
 router.get("/",companyAuthMiddleware ,  company ,   getPlans);
 
 
