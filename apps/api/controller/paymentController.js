@@ -35,7 +35,7 @@ export const paymentAccept = asyncHandler(async (req, res) => {
         payment = await prisma.payment.create({
             data:
             {
-                
+
                 amount: plan.price,
                 currency: "usd",
                 companyId,
@@ -70,7 +70,7 @@ export const paymentAccept = asyncHandler(async (req, res) => {
                 stripeIntentsId: paymentIntent.id
             }
         })
-        res.json({ client: paymentIntent.client_secret,amount : plan.price, currency : "usd", paymentId: payment.id })
+        res.json({ client: paymentIntent.client_secret, amount: plan.price, currency: "usd", paymentId: payment.id })
     } catch (error) {
         console.error("Unable to create demo payment:", error.message);
 
@@ -98,9 +98,17 @@ export const paymentAccept = asyncHandler(async (req, res) => {
 
 export const stripeWebhookHandler = asyncHandler(async (req, res) => {
     let event;
+    
 
-    const signature = req.headers["stripe-signature"]
-    console.log(signature)
+ // log 
+    // console.log("Signature exists:", !!signature);
+    // console.log("Body is Buffer:", Buffer.isBuffer(req.body));
+    // console.log(signature)
+
+        const signature = req.headers["stripe-signature"];
+
+
+
     if (!signature) {
         console.log(signature)
         return res.status(400).send("Missing Stripe signature");
@@ -109,6 +117,14 @@ export const stripeWebhookHandler = asyncHandler(async (req, res) => {
         event = await stripe.webhooks.constructEvent(
             req.body, signature, process.env.STRIPE_WEBHOOK_SECRET
         )
+
+
+        //  log
+
+        //   console.log("Verified event:", event.type);
+        // console.log("Event ID:", event.id);
+
+        
     } catch (error) {
         console.log(error.message)
         return res.status(500).json({ message: `error at ${error}` })
@@ -116,7 +132,7 @@ export const stripeWebhookHandler = asyncHandler(async (req, res) => {
     try {
         const intent = event.data.object;
         if (event.type === 'payment_intent.succeeded') {
-            const { paymentId, companyId, planId } = intent.metadata
+            const { paymentId, companyId, planId } = intent.metadata ?? {}
             if (!paymentId) {
                 return res.status(401).json({ message: "payment id is missing " })
             }
@@ -148,7 +164,7 @@ export const stripeWebhookHandler = asyncHandler(async (req, res) => {
                 })
                 if (currentPayment.status === "SUCCESS") return res.json({ message: " payment already process ", alreadyProcessed: true })
 
-                if (currentPayment.status !== "PENDING") return res.json({ message: " payment is not pending  solve issue or try again " })
+                if (currentPayment.status !== "PENDING") return res.json({ message: " payment is not pending  solve issue or try again ", notPending: true })
 
                 const plan = await tx.plan.findFirst({
                     where:
@@ -167,43 +183,43 @@ export const stripeWebhookHandler = asyncHandler(async (req, res) => {
                         id: companyId
                     }
                 })
-                if (!company ) return res.json({ message: " company not found " })
+                if (!company) return res.json({ message: " company not found " })
 
-                const now = new Date() ;
+                const now = new Date();
                 const end = new Date(now);
                 end.setDate(end.getDate() + 30)
 
                 await tx.payment.updateMany({
-                    where :
+                    where:
                     {
-                        id : paymentId
+                        id: paymentId
                     },
-                    data :
+                    data:
                     {
-                        status : "SUCCESS"
+                        status: "SUCCESS"
                     }
                 })
 
 
-                await tx.subscription.updateMany({ 
-                    where :{
-                       companyId,
+                await tx.subscription.updateMany({
+                    where: {
+                        companyId,
                     },
-                    data :
+                    data:
                     {
-                        status : "CANCEL",
-                        endAt : now ,
-                        canceledAt : now , 
+                        status: "CANCEL",
+                        endAt: now,
+                        canceledAt: now,
                     }
                 })
 
-                const subscription =   await tx.subscription.create({
-                    data :
+                const subscription = await tx.subscription.create({
+                    data:
                     {
-                        companyId : company.id,
-                        planId : plan.id,
-                        endAt : end ,
-                        createdAt : now
+                        companyId: company.id,
+                        planId: plan.id,
+                        endAt: end,
+                        createdAt: now
                     }
                 })
 
@@ -213,19 +229,19 @@ export const stripeWebhookHandler = asyncHandler(async (req, res) => {
                 })
 
                 return {
-                    alreadyProcessed : false ,
-                    subscriptionId : subscription.id,
-                    endAt :end 
+                    alreadyProcessed: false,
+                    subscriptionId: subscription.id,
+                    endAt: end
                 }
 
             })
 
-            return res.json({ message : (result.alreadyProcessed) ? " payment already processed " : " new subscription created " , ...result })
+            return res.json({ message: (result.alreadyProcessed) ? " payment already processed " : " new subscription created ", ...result })
 
         }
 
         if (event.type === 'payment_intent.payment_failed') {
-            const {paymentId , companyId , planId } = intent.metadata?.paymentId;
+            const { paymentId, companyId, planId } = intent.metadata ?? {};
             const failedPayment = await prisma.payment.updateMany({
                 where:
                 {
@@ -240,7 +256,13 @@ export const stripeWebhookHandler = asyncHandler(async (req, res) => {
                     status: 'FAIL'
                 }
             })
-            return res.status(200).json({ message: `PAYMENT ${failedPayment.status}` , count : failedPayment.count })
+
+            return res.status(200).json({
+                message: failedPayment.count
+                    ? "Payment marked as failed"
+                    : "No pending payment matched",
+                count: failedPayment.count
+            });
         }
         return res.sendStatus(200);
     } catch (err) {
