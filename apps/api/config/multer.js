@@ -20,13 +20,20 @@ export const multerController = async (req, res) => {
     }
 
     const uploadStream = cloudinary.uploader.upload_stream(
-        { folder: "team", resource_type: "auto" },
-        (error, result) => {
-            if (error) {
-                console.error("Cloudinary upload failed:", error)
+        (result) => {
+            if (result?.error) {
+                console.error("Cloudinary upload failed:", result.error.message || result.error)
                 return res.status(502).json({
                     success: false,
-                    message: error.message || "Cloudinary upload failed.",
+                    message: result.error.message || "Cloudinary upload failed.",
+                })
+            }
+
+            if (!result?.secure_url || !result.public_id) {
+                console.error("Cloudinary upload returned an invalid response.")
+                return res.status(502).json({
+                    success: false,
+                    message: "Cloudinary did not return the uploaded file details.",
                 })
             }
 
@@ -37,6 +44,7 @@ export const multerController = async (req, res) => {
                 public_id: result.public_id,
             })
         },
+        { folder: "team", resource_type: "auto" },
     )
 
     uploadStream.end(file.buffer)
