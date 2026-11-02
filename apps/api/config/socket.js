@@ -173,6 +173,13 @@ export const socketInit = (httpServer) => {
                 return;
             }
 
+            if (meeting.screenSharers.delete(socket.id)) {
+                socket.to(`meeting${meetingId}`).emit("screen-share-stopped", {
+                    userId: socket.data.user.id,
+                    name: socket.data.user.name,
+                });
+            }
+
             meeting.participants.delete(socket.id);
             socket.to(`meeting${meetingId}`).emit("meeting:participant-left", {
                 socketId: socket.id,
@@ -213,6 +220,38 @@ export const socketInit = (httpServer) => {
             callback?.({ ok: true, meetingId });
         });
 
+        function broadcastScreenShareEvent(eventName) {
+            const meetingId = socket.data.meetingId;
+            const meeting = getMeeting(meetingId);
+
+            if (!meeting || !meeting.participants.has(socket.id)) {
+                return;
+            }
+
+            if (eventName === "screen-share-started") {
+                meeting.screenSharers.set(socket.id, {
+                    socketId: socket.id,
+                    userId: socket.data.user.id,
+                    name: socket.data.user.name,
+                });
+            } else if (!meeting.screenSharers.delete(socket.id)) {
+                return;
+            }
+
+            socket.to(`meeting${meetingId}`).emit(eventName, {
+                userId: socket.data.user.id,
+                name: socket.data.user.name,
+            });
+        }
+
+        socket.on("screen-share-started", () => {
+            broadcastScreenShareEvent("screen-share-started");
+        });
+
+        socket.on("screen-share-stopped", () => {
+            broadcastScreenShareEvent("screen-share-stopped");
+        });
+
         socket.on("meeting:join", (meetingId, callback) => {
             const userId = socket.data.user?.id;
             const companyId = socket.data.companyId;
@@ -249,7 +288,14 @@ export const socketInit = (httpServer) => {
             socket.data.meetingId = meetingId;
             socket.join(`meeting${meetingId}`);
             socket.to(`meeting${meetingId}`).emit("meeting:participant-joined", participant);
-            callback?.({ ok: true, existingParticipants });
+            callback?.({
+                ok: true,
+                existingParticipants,
+                screenShares: [...meeting.screenSharers.values()].map(({ userId, name }) => ({
+                    userId,
+                    name,
+                })),
+            });
         });
 
         function relaySignal(target, event, payload) {

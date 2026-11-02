@@ -10,6 +10,7 @@ export function createMeeting(hostId, CompanyId) {
         CompanyId,
         hostId,
         participants: new Map(),
+        screenSharers: new Map(),
         createdAt: new Date(),
     });
 

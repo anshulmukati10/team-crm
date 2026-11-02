@@ -11,12 +11,16 @@ export default function useWebRTC(meetingId) {
   const [status, setStatus] = useState("connecting");
   const [error, setError] = useState("");
   const [mediaError, setMediaError] = useState("");
+  const [screenShareNotification, setScreenShareNotification] = useState(null);
 
   const peers = useRef(new Map());
   const pendingCandidates = useRef(new Map());
   const streamRef = useRef(null);
   const joinedRef = useRef(false);
   const leaveTimeoutRef = useRef(null);
+  const screenShareNotificationTimeoutRef = useRef(null);
+  const [screenStream, setScreenStream] = useState(null);
+  const screenStreamRef = useRef(null);
 
   const updateParticipant = useCallback((socketId, stream, name) => {
     setParticipants((current) => {
@@ -26,10 +30,10 @@ export default function useWebRTC(meetingId) {
         return current.map((participant) =>
           participant.socketId === socketId
             ? {
-                ...participant,
-                stream: stream || participant.stream,
-                name: name || participant.name,
-              }
+              ...participant,
+              stream: stream || participant.stream,
+              name: name || participant.name,
+            }
             : participant,
         );
       }
@@ -60,10 +64,13 @@ export default function useWebRTC(meetingId) {
       const peer = new RTCPeerConnection(ICE_SERVERS);
       peers.current.set(target, peer);
 
-      streamRef.current?.getTracks().forEach((track) => {
-        peer.addTrack(track, streamRef.current);
-      });
+      streamRef.current?.getTracks()
+        .filter((track) => track.kind !== "video" || !screenStreamRef.current)
+        .forEach((track) => peer.addTrack(track, streamRef.current));
 
+      screenStreamRef.current?.getVideoTracks().forEach((track) => {
+        peer.addTrack(track, screenStreamRef.current);
+      });
       peer.ontrack = (event) => {
         updateParticipant(target, event.streams[0]);
       };
@@ -103,7 +110,125 @@ export default function useWebRTC(meetingId) {
     },
     [removeParticipant, updateParticipant],
   );
+  const stopScreenShare = useCallback(async () => {
+    const displayStream = screenStreamRef.current;
+    if (!displayStream) return;
 
+    screenStreamRef.current = null;
+    setScreenStream(null);
+    meetingSocket.emit("screen-share-stopped");
+
+    const cameraTrack = streamRef.current?.getVideoTracks()[0] || null;
+
+    try {
+      const restoreResults = await Promise.allSettled(
+        Array.from(peers.current.values(), async (peer) => {
+          const videoSender = peer
+            .getTransceivers()
+            .find((transceiver) => transceiver.receiver.track.kind === "video")
+            ?.sender;
+
+          if (videoSender) {
+            await videoSender.replaceTrack(cameraTrack);
+          }
+        }),
+      );
+      const failedRestore = restoreResults.find((result) => result.status === "rejected");
+      if (failedRestore) {
+        console.error("Unable to restore video after screen sharing:", failedRestore.reason);
+        setError("Screen sharing stopped, but a participant's video could not be restored.");
+      }
+    } finally {
+      displayStream.getTracks().forEach((track) => {
+        track.onended = null;
+        track.stop();
+      });
+    }
+  }, []);
+
+  const startScreenShare = useCallback(async () => {
+    let displayStream;
+
+    try {
+      displayStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { cursor: "always" },
+        audio: false,
+      });
+
+      const screenTrack = displayStream.getVideoTracks()[0];
+      if (!screenTrack) {
+        throw new Error("No screen video track was selected.");
+      }
+
+      screenTrack.onended = () => {
+        stopScreenShare().catch((shareError) => {
+          console.error("Unable to stop screen sharing:", shareError);
+        });
+      };
+
+      screenStreamRef.current = displayStream;
+      setScreenStream(displayStream);
+
+      for (const [target, peer] of peers.current) {
+        if (screenStreamRef.current !== displayStream || screenTrack.readyState === "ended") {
+          return;
+        }
+
+        const videoSender = peer
+          .getTransceivers()
+          .find((transceiver) => transceiver.receiver.track.kind === "video")
+          ?.sender;
+
+        if (videoSender) {
+          await videoSender.replaceTrack(screenTrack);
+        } else {
+          peer.addTrack(screenTrack, displayStream);
+
+          const offer = await peer.createOffer();
+          await peer.setLocalDescription(offer);
+
+          meetingSocket.emit("webrtc:offer", {
+            target,
+            offer: peer.localDescription,
+          });
+        }
+      }
+
+      if (screenStreamRef.current !== displayStream || screenTrack.readyState === "ended") {
+        return;
+      }
+
+      meetingSocket.emit("screen-share-started");
+    } catch (shareError) {
+      const cameraTrack = streamRef.current?.getVideoTracks()[0] || null;
+      const restoreResults = await Promise.allSettled(
+        Array.from(peers.current.values(), async (peer) => {
+          try {
+            const videoSender = peer
+              .getTransceivers()
+              .find((transceiver) => transceiver.receiver.track.kind === "video")
+              ?.sender;
+            if (videoSender?.track === displayStream?.getVideoTracks()[0]) {
+              await videoSender.replaceTrack(cameraTrack);
+            }
+          } catch (restoreError) {
+            console.error("Unable to restore video after screen-share failure:", restoreError);
+            throw restoreError;
+          }
+        }),
+      );
+      if (restoreResults.some((result) => result.status === "rejected")) {
+        setError("Screen sharing failed and some participant video could not be restored.");
+      }
+      displayStream?.getTracks().forEach((track) => {
+        track.onended = null;
+        track.stop();
+      });
+      screenStreamRef.current = null;
+      setScreenStream(null);
+      setError(shareError.message || "Unable to share your screen.");
+    }
+  }, [stopScreenShare]);
   useEffect(() => {
     let mounted = true;
     const pendingCandidatesForEffect = pendingCandidates.current;
@@ -132,6 +257,13 @@ export default function useWebRTC(meetingId) {
 
         joinedRef.current = true;
         setStatus("joined");
+        if (response.screenShares?.length) {
+          const names = response.screenShares.map((share) => share.name || "A participant");
+          setScreenShareNotification({
+            message: `${names.join(", ")} ${names.length === 1 ? "is" : "are"} sharing their screen.`,
+            isSharing: true,
+          });
+        }
         (response.existingParticipants || []).forEach((participant) => {
           updateParticipant(
             participant.socketId,
@@ -208,6 +340,28 @@ export default function useWebRTC(meetingId) {
       removeParticipant(socketId);
     };
 
+    const handleScreenShareStarted = ({ name }) => {
+      if (screenShareNotificationTimeoutRef.current !== null) {
+        window.clearTimeout(screenShareNotificationTimeoutRef.current);
+        screenShareNotificationTimeoutRef.current = null;
+      }
+      setScreenShareNotification({
+        message: `${name || "A participant"} started sharing their screen.`,
+        isSharing: true,
+      });
+    };
+
+    const handleScreenShareStopped = ({ name }) => {
+      setScreenShareNotification({
+        message: `${name || "A participant"} stopped sharing their screen.`,
+        isSharing: false,
+      });
+      screenShareNotificationTimeoutRef.current = window.setTimeout(() => {
+        setScreenShareNotification(null);
+        screenShareNotificationTimeoutRef.current = null;
+      }, 4000);
+    };
+
     const handleConnectError = (connectionError) => {
       if (mounted) {
         setStatus("error");
@@ -230,6 +384,8 @@ export default function useWebRTC(meetingId) {
     meetingSocket.on("webrtc:ice-candidate", handleCandidate);
     meetingSocket.on("meeting:participant-joined", handleParticipantJoined);
     meetingSocket.on("meeting:participant-left", handleParticipantLeft);
+    meetingSocket.on("screen-share-started", handleScreenShareStarted);
+    meetingSocket.on("screen-share-stopped", handleScreenShareStopped);
     meetingSocket.on("connect_error", handleConnectError);
     meetingSocket.on("disconnect", handleDisconnect);
     meetingSocket.on("connect", joinMeeting);
@@ -301,7 +457,7 @@ export default function useWebRTC(meetingId) {
               : mediaAccessError.name === "NotReadableError"
                 ? "Your camera or microphone is unavailable or already in use. You can still join without them."
                 : mediaAccessError.message ||
-                  "Camera or microphone access failed. You can still join without them.",
+                "Camera or microphone access failed. You can still join without them.",
           );
         }
       }
@@ -325,6 +481,8 @@ export default function useWebRTC(meetingId) {
       meetingSocket.off("webrtc:ice-candidate", handleCandidate);
       meetingSocket.off("meeting:participant-joined", handleParticipantJoined);
       meetingSocket.off("meeting:participant-left", handleParticipantLeft);
+      meetingSocket.off("screen-share-started", handleScreenShareStarted);
+      meetingSocket.off("screen-share-stopped", handleScreenShareStopped);
       meetingSocket.off("connect_error", handleConnectError);
       meetingSocket.off("disconnect", handleDisconnect);
       meetingSocket.off("connect", joinMeeting);
@@ -339,9 +497,32 @@ export default function useWebRTC(meetingId) {
       pendingCandidatesForEffect.clear();
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
+      const activeScreenStream = screenStreamRef.current;
+      screenStreamRef.current = null;
+      activeScreenStream?.getTracks().forEach((track) => {
+        track.onended = null;
+        track.stop();
+      });
+      if (activeScreenStream) {
+        meetingSocket.emit("screen-share-stopped");
+      }
+      if (screenShareNotificationTimeoutRef.current !== null) {
+        window.clearTimeout(screenShareNotificationTimeoutRef.current);
+        screenShareNotificationTimeoutRef.current = null;
+      }
       joinedRef.current = false;
     };
   }, [createPeer, meetingId, removeParticipant, updateParticipant]);
 
-  return { localStream, participants, status, error, mediaError };
+  return {
+    localStream,
+    participants,
+    status,
+    error,
+    mediaError,
+    screenStream,
+    startScreenShare,
+    stopScreenShare,
+    screenShareNotification,
+  };
 }

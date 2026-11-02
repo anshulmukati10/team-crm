@@ -66,7 +66,17 @@ export default function MeetingRoom() {
   const { meetingId = "" } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { localStream, participants, status, error, mediaError } = useWebRTC(meetingId);
+  const {
+    localStream,
+    participants,
+    status,
+    error,
+    mediaError,
+    screenStream,
+    startScreenShare,
+    stopScreenShare,
+    screenShareNotification,
+  } = useWebRTC(meetingId);
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
@@ -161,15 +171,20 @@ export default function MeetingRoom() {
           )}
         </div>
       )}
+      {screenShareNotification && (
+        <div className="meeting-room-alert" role="status" aria-live="polite">
+          <span>{screenShareNotification.message}</span>
+        </div>
+      )}
 
       <div className={`meeting-room-content${peopleOpen ? " people-panel-open" : ""}`}>
         <section className="meeting-stage" aria-label="Meeting video">
           <div className={`meeting-video-grid${participants.length > 0 ? " has-participants" : ""}`}>
             <VideoTile
-              cameraEnabled={cameraEnabled}
+              cameraEnabled={screenStream ? true : cameraEnabled}
               isLocal
               name={user.name}
-              stream={localStream}
+              stream={screenStream || localStream}
             />
             {participants.map((participant) => (
               <VideoTile
@@ -238,9 +253,14 @@ export default function MeetingRoom() {
             {cameraEnabled ? <FiVideo size={19} /> : <FiVideoOff size={19} />}
             <span>{cameraEnabled ? "Stop video" : "Start video"}</span>
           </button>
-          <button aria-label="Share screen" className="meeting-control meeting-screen-control" disabled type="button">
+          <button
+            aria-label={screenStream ? "Stop screen sharing" : "Share screen"}
+            className="meeting-control meeting-screen-control"
+            onClick={screenStream ? stopScreenShare : startScreenShare}
+            type="button"
+          >
             <FiMonitor size={19} />
-            <span>Share screen</span>
+            <span>{screenStream ? "Stop sharing" : "Share screen"}</span>
           </button>
           <button
             aria-label="Leave meeting"
