@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Icon } from "../../components/ui/Navbar";
+import FileUploadButton from "../../components/ui/fileUpload"
 
 export default function MessageInput({ onSend, disabled = false }) {
   const [message, setMessage] = useState("");
@@ -37,6 +38,7 @@ export default function MessageInput({ onSend, disabled = false }) {
         >
           <Icon name="arrow" size={18} />
         </button>
+        <FileUploadButton size={18} />
       </form>
       <p className="chat-hint">
         Press Enter to send, Shift + Enter for a new line

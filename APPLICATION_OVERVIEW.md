@@ -1,6 +1,6 @@
 # Team CRM — Application Overview
 
-> **Repository snapshot reviewed:** 2026-10-29
+> **Repository snapshot reviewed:** 2026-10-30
 > This document describes the code currently in this repository. It distinguishes working implementation from intended workflows and known gaps; it is not a claim that every feature is production-ready.
 
 ## 1. Product and repository at a glance
@@ -106,6 +106,19 @@ Prisma CLI configuration is in [`prisma.config.js`](./prisma.config.js). It load
 
 These are frontend navigation and UX checks, not API authorization. Some API controllers make their own role checks, but they are inconsistent; see [Authorization and implementation gaps](#9-authorization-and-implementation-gaps).
 
+### Employee roles and access (RBAC)
+
+Employee roles are the `ADMIN`, `SALES`, `WAREHOUSE`, and `ACCOUNTS` values in the Prisma `Role` enum. The frontend hides navigation and routes based on role; API authentication and role checks are separate and must be treated as the actual access boundary.
+
+| Role | Intended day-to-day work | Current API/UI access |
+|---|---|---|
+| **Admin** | Operate the workspace: manage products and leads, review warehouse requests, manage employees and chat rooms, and oversee account data. | Admin-only UI for Team and request review; admin API routes cover catalog, leads, requests, wallet, and chat management. Several routes depend on the flawed `adminMiddleware` described in section 9. |
+| **Sales** | Work assigned leads, update lead status, and create/view sales orders. | The API checks the Sales role for lead/order reads and order creation. Updating a lead checks the role but currently does not check assignment ownership. |
+| **Warehouse** | Inspect stock and fulfillment orders, submit stock/import requests, and fulfill orders by decrementing inventory. | API handlers check the Warehouse role for most warehouse actions. The stock-read check is broken and does not reliably restrict access. |
+| **Accounts** | Review sales activity, order totals, expenses, and account balance. | Accounts endpoints permit Accounts and Admin; the account and balance queries have a schema mismatch noted in section 9. |
+
+The **company account** is a separate authentication identity, not a fifth employee role. Company-authenticated routes manage company members and subscriptions; employee UI routes do not currently expose company onboarding or billing. The current implementation is not a complete or consistently enforced RBAC system: role-based UI visibility is not a security control, and API authorization gaps are listed in section 9.
+
 ### Current source layout
 
 ```text
@@ -134,11 +147,11 @@ apps/web/src/
 
 The feature API modules use Axios and `VITE_API_URL`; requests relying on employee cookies use credentialed requests. `WorkspaceContext` stores UI state for leads, orders, products, and requests, but its arrays are initialized in memory and are not the durable business-data store. Dashboard and feature pages fetch server data. A Socket.IO `workspace_update` event is translated into a browser event so pages can reload their data.
 
-The dashboard selects API calls based on role: Sales loads assigned leads and orders; Warehouse loads orders, inventory, and requests; Admin loads leads, orders, inventory, and requests; Accounts loads sales records. The accounts screen combines sales records and the account balance.
+The dashboard selects API calls based on role: Sales loads assigned leads and orders; Warehouse loads orders, inventory, and requests; Admin loads leads, orders, inventory, and requests; Accounts loads sales records. The accounts screen requests sales records and the account balance, but the balance endpoint currently mismatches the schema.
 
 ### Employee browser session behavior
 
-Employee login sets an HttpOnly `token` cookie on the API. The login response returns user identity fields but no JWT. The web app stores the user in local storage and stores the literal placeholder `http-only-cookie-session` under a `token` key; it is not a server credential. API authentication uses the cookie (or a real Bearer token), not that local-storage placeholder. Initial auth state is restored from local storage without validating the cookie against the server.
+Employee login sets an HttpOnly `token` cookie on the API. The login response returns user identity fields but no JWT. The web app stores the user in local storage and stores the literal placeholder `http-only-cookie-session` under a `token` key; it is not a server credential. API authentication uses the cookie or a real Bearer token, not that local-storage placeholder. Initial auth state is restored from local storage without validating the cookie against the server.
 
 ## 5. API surface
 
@@ -159,7 +172,11 @@ All paths below are relative to the API origin. The route files are mounted in [
 
 ### Admin — `/admin`
 
-Admin routes generally use employee auth and the admin middleware. `POST /admin/credit-amount` is an exception: it currently has only the plan limiter.
+Admin routes use employee authentication and the admin middleware. The credit endpoint also runs the company balance plan limiter. `adminMiddleware` currently accepts a role from the request body, so these route guards are not safe until that middleware is corrected.
+
+#### Admin — role, responsibilities, and API
+
+An **Admin** is an employee account intended to operate the shared business workspace, not a company login. In the current UI the admin can view the admin dashboard, review stock requests, access leads/inventory/accounts, manage team members, and create/manage team chat rooms. The API additionally provides product and lead management, balance reads, request decisions, and company-wallet crediting. It does not provide a complete company settings or subscription-management interface.
 
 | Method and path | Purpose |
 |---|---|
@@ -170,14 +187,16 @@ Admin routes generally use employee auth and the admin middleware. `POST /admin/
 | `DELETE /admin/lead/delete-lead?id=...` | Delete lead |
 | `GET /admin/lead` | List leads |
 | `GET /admin/get-request` | List warehouse stock requests |
-| `POST /admin/handle-request?reqId=...` | Approve or reject a request based on the admin user's wallet balance |
-| `POST /admin/credit-amount` | Record an expense and credit the admin user's wallet |
-| `GET /admin/balance` | Read the admin user's wallet |
+| `POST /admin/handle-request?reqId=...` | Intended to approve/debit or reject based on the admin employee's wallet; currently mismatches the company-only Wallet schema |
+| `POST /admin/credit-amount?id=<companyId>` | Credit a company's wallet; requires a positive integer `balance` in the body and passes the company's active plan balance limit |
+| `GET /admin/balance` | Attempt to read the admin employee's wallet balance; currently mismatches the company-only Wallet schema |
 | `GET /admin/get-all-user` | List non-admin employees |
 | `POST /admin/room` | Create a chat room and add members |
 | `PUT /admin/room` | Add a member to a room |
 | `DELETE /admin/room?roomId=...&memberId=...` | Remove a member |
 | `DELETE /admin/delete-room` | Delete rooms listed in the request body |
+
+**Admin API notes:** Product creation takes `name`, `price`, and `stock`; lead creation takes `name`, `phone`, and `salesId`. Request review takes `reqId` as a query parameter and is intended to approve/debit or reject based on available funds, but the current schema has no employee wallet for the handler to query. The credit endpoint now has employee auth/admin middleware, but its handler is specifically for a **company** wallet (`id` query parameter and `{ "balance": ... }` body), not the admin employee's personal wallet. The current web helper submits `{ amount }` without the company ID, so the credit form is not wired to the endpoint's current contract.
 
 ### Sales — `/sales`
 
@@ -208,7 +227,7 @@ Both routes have employee authentication. The controller permits Accounts and Ad
 
 | Method and path | Purpose |
 |---|---|
-| `GET /accounts/get-balance` | Read the employee wallet balance |
+| `GET /accounts/get-balance` | Attempt to read the employee wallet balance; currently mismatches the company-only Wallet schema |
 | `GET /accounts/sales-list` | Read sales users, expenses, leads, and their orders |
 
 ### Company, plans, and payments
@@ -229,7 +248,7 @@ Both routes have employee authentication. The controller permits Accounts and Ad
 
 On `payment_intent.succeeded`, the webhook validates the local payment and plan, marks the payment successful, cancels existing company subscriptions, creates a new 30-day subscription, and updates the company's current `planId`. On `payment_intent.payment_failed`, it marks the matching pending payment as failed. Other event types receive an empty successful response.
 
-Plan limits are implemented in [`apps/api/jobs/planLimiter.js`](./apps/api/jobs/planLimiter.js). It looks for a company ID in `req.company.id` or `req.query.id`, finds the company's active non-expired subscription, loads its plan details, and checks member, order, or balance usage. It is currently mounted on company member creation/addition, sales order creation, and admin crediting. The limiter expects company context, however; the sales route has employee authentication but does not set `req.company`, and the admin credit route currently has no auth middleware. Those mounts therefore do not provide the context/identity their handlers need. The balance branch also returns a wallet object while comparing it numerically with the plan limit. Treat these checks as incomplete until those routes and limit comparisons are corrected and verified. Subscription expiration code is scheduled separately; see [Background jobs and real-time behavior](#7-background-jobs-and-real-time-behavior).
+Plan limits are implemented in [`apps/api/jobs/planLimiter.js`](./apps/api/jobs/planLimiter.js). It looks for a company ID in `req.company.id` or `req.query.id`, finds the company's active non-expired subscription, loads its plan details, and checks member, order, or balance usage. It is mounted on company member creation/addition, sales order creation, and admin crediting. The company member routes have company auth/context; the credit route uses the `id` query parameter. The sales order route has employee auth but provides neither company context nor that query parameter, so order creation currently fails at the limiter before the controller runs. The limiter compares the company wallet's numeric balance plus requested amount against the plan's `Details.balance` limit. Separately, plan creation still submits `maxWallet`, which does not match that schema field. Subscription expiration code is scheduled separately; see [Background jobs and real-time behavior](#7-background-jobs-and-real-time-behavior).
 
 ## 6. Database model
 
@@ -251,14 +270,14 @@ The source of truth is [`packages/db/prisma/schema.prisma`](./packages/db/prisma
 
 | Model | Stored data and relationships |
 |---|---|
-| `User` | Auto-increment integer ID, name, unique email, password hash, role, optional `memberOf` company ID; relations to leads, orders, expenses, requests, optional wallet, messages, and chat memberships. `memberOf` is not unique. |
+| `User` | Auto-increment integer ID, name, unique email, password hash, role, optional `memberOf` company ID; relations to leads, orders, expenses, requests, messages, and chat memberships. `memberOf` is not unique. There is no User-to-Wallet relation in the current schema. |
 | `Company` | UUID ID, name, unique email, password hash, members, orders, optional wallet, required current `planId`, subscriptions, and payments. |
 | `Lead` | UUID ID, name, unique 10-character phone, status defaulting to `PENDING`, required sales-user assignment, and orders. |
 | `Product` | UUID ID, name, integer price defaulting to zero, stock quantity, order items, and optional request relation. |
 | `Order` | UUID ID, status defaulting to `PLACED`, decimal total, creation timestamp, required sales user, required lead, order items, and required company `orderOf`. |
 | `OrderItem` | UUID ID, quantity defaulting to one, integer price, required order and product relations. |
 | `Expenses` | String ID, integer amount, optional note, and required user relation. |
-| `Wallet` | Auto-increment ID, integer balance defaulting to zero, unique user ID, unique company `balanceOf`, and relations to both user and company. |
+| `Wallet` | Auto-increment ID, integer balance defaulting to zero, unique company `balanceOf`, and a required relation to Company. The schema does not define a user wallet or a `userId` field. |
 | `Request` | Auto-increment ID, integer amount, optional note, status defaulting to `REQUESTED`, required user, and related products. |
 | `Room` | UUID ID, name, creation timestamp, messages, and group memberships. |
 | `GroupMember` | UUID ID, room/user IDs, `isAdmin` default false, `joinedAt`, cascade-delete relations, and unique `(roomId, userId)`. |
@@ -274,7 +293,7 @@ The company has a current plan pointer (`Company.planId`) in addition to subscri
 
 ### Socket.IO events
 
-[`apps/api/config/socket.js`](./apps/api/config/socket.js) creates a Socket.IO server on the HTTP server and restricts its CORS origin to `FRONTEND_URL`. The socket handshake authenticates the employee `token` cookie; company tokens are not accepted by this socket middleware.
+[`apps/api/config/socket.js`](./apps/api/config/socket.js) creates a Socket.IO server on the HTTP server and restricts its CORS origin to `FRONTEND_URL`. The socket handshake authenticates the employee `token` cookie, reloads the employee from the database, and rejects accounts without a `memberOf` company association. Company tokens are not accepted by this socket middleware.
 
 | Event | Behavior |
 |---|---|
@@ -283,8 +302,17 @@ The company has a current plan pointer (`Company.planId`) in addition to subscri
 | `mark_message_seen` | Verifies membership and message existence/order, updates the in-memory receipt, broadcasts `receipts_updated` |
 | `workspace_update` | Server-wide invalidation signal emitted after selected business writes; web clients dispatch a browser event and reload data |
 | `room_error` | Sent to a client for a room-membership/read-receipt error |
+| `meeting:create`, `meeting:join`, `meeting:leave` | Creates or joins a company-scoped meeting; participant presence and WebRTC offer/answer/ICE relay are handled over Socket.IO |
 
 Chat message history is stored in PostgreSQL. Read receipts are held in a process-local Map by [`apps/api/config/readReceipts.js`](./apps/api/config/readReceipts.js), not in the database; they are lost when the process restarts. Message persistence uses Redis lists `crm:message:buffer` and `crm:message:processing`. [`apps/api/config/worker.js`](./apps/api/config/worker.js) flushes up to 250 queued messages to Prisma once per minute using `createMany` with duplicate skipping.
+
+#### Meeting functionality and limitations
+
+The web app provides a meeting lobby and room at `/meetings` and `/meetings/:meetingId`. The lobby creates meetings through `meeting:create` or accepts an ID/link; the room joins through `meeting:join`, acquires local camera/microphone access, and uses WebRTC peer connections with Socket.IO offer/answer/ICE signaling. The server requires an authenticated employee with a company association and only permits joining meetings owned by that company. `meeting:leave` and socket disconnect remove participants; empty meetings are deleted.
+
+Meeting records in [`apps/api/config/meetManager.js`](./apps/api/config/meetManager.js) are process-local. They are lost on API restart and are not shared across API instances, so this implementation requires a single API process and is not durable or horizontally scalable. The web client currently uses a public STUN server but no TURN relay; peer-to-peer media can fail on restrictive NATs or firewalls. Production deployment needs shared meeting state and Socket.IO coordination across instances, plus a TURN service and appropriate credential/configuration management.
+
+The Swagger generator now includes employee, admin, warehouse, sales, company, plan, and payment route files. It documents HTTP routes only; Socket.IO events are not represented in the generated OpenAPI document. The payment webhook is registered directly in the API entry point before JSON parsing.
 
 ### Subscription expiration
 
@@ -296,10 +324,10 @@ Chat message history is stored in PostgreSQL. Read receipts are held in a proces
 2. **Employee onboarding:** The public employee registration endpoint accepts a role in the request body; the web form offers Sales, Warehouse, or Accounts, but not Admin. Company-authenticated routes also allow creating a member with a shared fixed password or connecting an existing employee by ID, subject to the member limiter.
 3. **Sales:** Admins can create and assign leads. A sales user can view leads assigned to them, update a lead status, and create orders using product IDs and quantities.
 4. **Warehouse:** Warehouse users can view orders and stock, submit stock requests, and process an order when product stock is sufficient. The handler decrements stock and updates order status.
-5. **Request review:** Admins can view requests; the request handler compares the amount to the current admin user's wallet, then approves/debits or rejects the request.
-6. **Accounts:** Accounts/Admin users can see a wallet balance and nested sales records, including leads, orders, and expenses. The web account screen presents order totals and statuses.
+5. **Request review:** Admins can view requests; the handler intends to compare the amount to the acting admin's wallet, then approve/debit or reject the request. This flow does not match the current company-only Wallet schema and is expected to fail until the wallet model or handler is aligned.
+6. **Accounts:** Accounts/Admin users can request a balance and nested sales records, including leads, orders, and expenses. The sales-list query is implemented; the balance query expects a user-wallet field that the current schema does not have, so it is not a working end-to-end account balance feature.
 7. **Chat:** An admin can create rooms and manage membership. Room members can retrieve messages and use Socket.IO messaging/read receipts.
-8. **Subscriptions:** Company creation assigns an active Free plan subscription; a company-authenticated payment request initializes a Stripe PaymentIntent for an active paid Pro plan. The webhook records payment outcome and creates the paid subscription. A separate company `POST /subscription` endpoint can directly create an active subscription for a supplied plan ID, without payment.
+8. **Subscriptions:** Company creation assigns an active Free plan subscription; a company-authenticated payment request initializes a Stripe PaymentIntent for an active paid Pro plan. The webhook records payment outcome and creates the paid subscription. A separate company `POST /subscription` endpoint can directly create an active subscription for a supplied plan ID, without payment. There is no company onboarding, plan-selection, or billing UI.
 
 The API and UI do not yet provide every end-to-end workflow. Subscriptions and payments have no current UI, and business controllers do not consistently populate all required database fields.
 
@@ -311,13 +339,15 @@ These notes describe observed code behavior and should be revisited as fixes lan
 - **Public role selection:** Employee registration is unauthenticated and accepts the role from the request body. Omitting Admin from the dropdown is only a UI restriction.
 - **Employee company association:** `User.memberOf` is optional in the current schema, so public employee registration can create an employee without a company. Company `create-member` uses the fixed password `techbuilds`; `add-member` accepts an existing user ID and has no invitation or ownership-verification flow for users already associated with another company.
 - **Profile password update:** The employee profile controller writes a supplied password directly rather than hashing it, unlike account creation/login.
-- **Order/company mismatch:** `Order.orderOf` is required by Prisma, but the sales order controller does not set it. It may fail to create an order. Although the order route now applies `planLimiter("order")`, employee authentication does not populate `req.company`, so the limiter cannot reliably find the sales user's company subscription.
-- **Wallet/company mismatch:** `Wallet.balanceOf` is required by the schema. Some wallet upsert create paths supply only a user ID and balance, so those paths can fail when creating a wallet.
+- **Order/company mismatch:** `Order.orderOf` is required by Prisma, but the sales order controller does not set it. It may fail to create an order. The order route's `planLimiter("order")` also runs before the controller and receives neither `req.company` nor a company query ID from the sales UI, so it rejects the request with a company-authentication error.
+- **Wallet schema mismatch:** `Wallet` only relates to Company via `balanceOf`; it has no `userId`. The request approval and account-balance controllers query `wallet.userId`, so those intended employee-wallet flows do not match the generated Prisma model. Company wallet crediting in the admin controller does use `balanceOf`.
 - **Warehouse stock read authorization:** The stock handler's condition uses `role !== "ADMIN" || role !== "WAREHOUSE"`, which is always true for a single role; its subsequent negation therefore does not block unauthorized roles. Other warehouse handlers have their own and inconsistent checks.
 - **Lead status ownership:** The sales status-update handler checks the caller's Sales role but fetches/updates by lead ID without verifying that the lead is assigned to that user. The read and create-order paths do enforce assignment.
-- **Role checks are uneven:** The route guards in the web app are not security controls. Warehouse checks happen in individual handlers; Accounts controllers check Accounts/Admin; Sales checks are limited to selected handlers. Most admin routes apply the flawed admin middleware; `POST /admin/credit-amount` currently does not.
-- **Plan creation and subscription changes:** `POST /plans` has no authentication middleware. Company `POST /subscription` checks that the company and plan exist and that plan details exist, but does not check whether the plan is active, update `Company.planId`, or require payment. The plan controller still accepts/creates `maxWallet`, while the current `Details` schema has `balance`, so plan creation does not match the schema.
-- **Plan limiter wiring:** `planLimiter` is mounted for company member routes, sales order creation, and admin crediting. Sales and admin requests do not receive `req.company` from their current route middleware; `String(undefined)` also bypasses the intended missing-ID check. The admin credit route no longer has employee auth/admin middleware, and its handler expects `req.user`. The balance limiter reads a wallet object and compares it to `Details.balance`, so that limit comparison is not reliable.
+- **Role checks are uneven:** The route guards in the web app are not security controls. Warehouse checks happen in individual handlers; Accounts controllers check Accounts/Admin; Sales checks are limited to selected handlers and status updates do not confirm lead ownership. Most admin routes apply the flawed admin middleware. The credit route now includes auth/admin middleware.
+- **Plan creation and subscription changes:** `POST /plans` has no authentication middleware. Company `POST /subscription` checks that the company and plan exist and that plan details exist, but does not check whether the plan is active, update `Company.planId`, or require payment. The plan controller accepts/creates `maxWallet`, while the current `Details` schema has `balance`, so plan creation does not match the schema.
+- **Plan limiter wiring:** `planLimiter` is mounted for company member routes, sales order creation, and admin crediting. The member routes have verified company context, and the admin credit route can use its query `id`; sales order creation has no company ID/context and is blocked. The balance limit comparison itself uses the current numeric wallet balance correctly, but plan creation's field mismatch means plan details may not be created as intended.
+- **Admin wallet UI/API mismatch:** The admin controller expects `POST /admin/credit-amount?id=<companyId>` with `{ "balance": <positive integer> }` and credits a company wallet. The web UI helper sends `{ "amount": ... }` and no company ID; it also describes the target as the admin wallet. The UI flow therefore cannot successfully call the current endpoint.
+- **Meeting events are incomplete:** The new socket meeting handlers do not currently provide a usable meeting lifecycle, and no browser feature calls them. See [Meeting prototype status](#meeting-prototype-status).
 - **Company logout cookie name:** Company login sets `companyToken`, while the company logout handler clears `token`; this may leave the company cookie present.
 - **Employee session state:** The browser stores a placeholder token string in local storage and restores the user without checking the cookie/session with the API. Server auth is cookie-based, so stale browser identity and expired cookies can disagree.
 - **Company isolation is incomplete:** Several employee business queries are global and not consistently filtered by `memberOf`/company ID. Treat this as a single shared dataset, not as proven tenant isolation.

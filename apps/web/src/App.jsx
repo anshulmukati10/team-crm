@@ -12,6 +12,8 @@ import Auth from "./screens/Auth";
 import ChatScreen from "./screens/Chat";
 import Dashboard from "./screens/Dashboard";
 import Home from "./screens/Home";
+import MeetingLobby from "./screens/meetingLobby";
+import MeetingRoom from "./screens/meetingRoom";
 import Profile from "./screens/Profile";
 
 function RequestRoute() {
@@ -26,6 +28,11 @@ function RoleRoute({ roles, children }) {
   return roles.includes(role) ? children : <Navigate to="/" replace />;
 }
 
+function MeetingRoomRoute() {
+  const { user } = useAuth();
+  return user.loggedIn ? <MeetingRoom /> : <Navigate replace to="/signin" />;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -33,6 +40,7 @@ export default function App() {
         <Route index element={<Dashboard />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="home" element={<Home />} />
+        <Route path="meetings" element={<MeetingLobby />} />
         <Route
           path="leads"
           element={
@@ -70,6 +78,7 @@ export default function App() {
         />
         <Route path="profile" element={<Profile />} />
       </Route>
+      <Route path="/meetings/:meetingId" element={<MeetingRoomRoute />} />
       <Route path="/signin" element={<Auth mode="signin" />} />
       <Route path="/signup" element={<Auth mode="signup" />} />
       <Route path="*" element={<Navigate to="/" replace />} />

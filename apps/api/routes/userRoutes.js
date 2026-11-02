@@ -3,6 +3,7 @@ import { createUSer ,getProfile ,  deleteUser, loginUser, logoutUser, updateProf
 import admninMiddleware from '../middleware/adminMiddleware.js'
 import authMiddleware from '../middleware/authMiddleware.js';
 import rateLimiter from '../middleware/redisMiddleware.js';
+import { multerController, upload } from '../config/multer.js';
 const router = express.Router();
 
 router.post('/register' ,rateLimiter(3,60), createUSer)
@@ -13,5 +14,6 @@ router.get('/chat/:id/messages' , authMiddleware , socketConnection)
 router.get('/profile' , authMiddleware , getProfile)
 router.put('/profile' , authMiddleware , updateProfile)
 router.get('/get-rooms' , authMiddleware , getRooms)
+router.post('/upload' , authMiddleware  ,upload.single('avatar') , multerController )
 
-export default router ; 
+export default router ;

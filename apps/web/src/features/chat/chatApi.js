@@ -72,3 +72,16 @@ export const addMember = async ({ roomId, userId }) => {
     }
 };
 
+
+export const upload = async(data) =>
+{
+  try {
+     const response = await axios.post(`${API_BASE}/auth/upload` , data);
+     return response?.data
+  } catch (error) {
+    throw error?.response?.data?.message ||
+      (error?.code === "ECONNABORTED"
+        ? "Upload timed out. The file may already be in Cloudinary; check before retrying."
+        : error?.message || "Failed to upload")
+  }
+}

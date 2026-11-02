@@ -53,6 +53,12 @@ const navigation = [
         icon: "chat",
         roles: Object.values(ROLES),
       },
+      {
+        to: "/meetings",
+        label: "Meetings",
+        icon: "users",
+        roles: Object.values(ROLES),
+      },
     ],
   },
 ];
@@ -67,6 +73,7 @@ const pageTitles = {
   "/requests": "Stock requests",
   "/accounts": "Accounts",
   "/chat": "Team chat",
+  "/meetings": "Meetings",
   "/team": "Team members",
   "/profile": "My profile",
 };

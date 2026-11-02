@@ -14,7 +14,11 @@ const endpointFiles = [
     path.join(__dirname, '../routes/userRoutes.js'),
     path.join(__dirname, '../routes/adminRoutes/adminRoutes.js'),
     path.join(__dirname, '../routes/warehouseRoute.js'),
-    path.join(__dirname, '../routes/saleRoute.js')
+    path.join(__dirname, '../routes/saleRoute.js'),
+    path.join(__dirname, '../routes/planRoute.js'),
+    path.join(__dirname, '../routes/paymentRoute.js'),
+    path.join(__dirname, '../routes/companyRoutes/companyRoute.js')
+
 ];
 
 const doc = {
@@ -37,8 +41,7 @@ try {
     }
     console.log(`Swagger specification generated at ${outputFile}`)
 }
-catch (err) 
-{
+catch (err) {
     console.error('Swagger specification generation failed:', err)
     process.exitCode = 1
 }
