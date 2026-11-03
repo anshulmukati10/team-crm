@@ -95,7 +95,7 @@ Prisma CLI configuration is in [`prisma.config.js`](./prisma.config.js). It load
 | `/` and `/dashboard` | Role-specific dashboard | Any signed-in employee |
 | `/home` | Workspace introduction | Any signed-in employee |
 | `/leads` | Leads | Admin, Sales, Accounts |
-| `/orders` | Sales order view | No route-level role restriction |
+| `/orders` | Sales order creation/history, warehouse processing/delivery, or Accounts order history | Any signed-in employee |
 | `/inventory` | Inventory | Admin, Warehouse |
 | `/requests` | Admin request review or Warehouse request view | Admin or Warehouse |
 | `/accounts` | Account overview | Admin, Accounts |
@@ -121,7 +121,7 @@ Employee roles are the `ADMIN`, `SALES`, `WAREHOUSE`, and `ACCOUNTS` values in t
 |---|---|---|
 | **Admin** | Operate the workspace: manage products and leads, review warehouse requests, manage employees and chat rooms, and oversee account data. | Admin-only UI for Team and request review; admin API routes cover catalog, leads, requests, wallet, and chat management. Several routes depend on the flawed `adminMiddleware` described in section 9. |
 | **Sales** | Work assigned leads, update lead status, and create/view sales orders. | The API checks the Sales role for lead/order reads and order creation. Updating a lead checks the role but currently does not check assignment ownership. |
-| **Warehouse** | Inspect stock and fulfillment orders, submit stock/import requests, and fulfill orders by decrementing inventory. | API handlers check the Warehouse role for most warehouse actions. The stock-read check is broken and does not reliably restrict access. |
+| **Warehouse** | Inspect stock and fulfillment orders, submit stock/import requests, process placed orders, and mark processed orders delivered. | API handlers check the Warehouse role for most warehouse actions. The stock-read check is broken and does not reliably restrict access; order processing also has a wallet/schema mismatch that can leave partial side effects. |
 | **Accounts** | Review sales activity, order totals, expenses, and account balance. | Accounts endpoints permit Accounts and Admin; the account and balance queries have a schema mismatch noted in section 9. |
 
 The **company account** is a separate authentication identity, not a fifth employee role. Its portal currently supports onboarding, member creation/listing, company order and wallet views, and subscription selection/billing. Company and employee sessions use separate cookies and contexts. The current implementation is not a complete or consistently enforced RBAC system: role-based UI visibility is not a security control, and API authorization gaps are listed in section 9.
@@ -161,7 +161,7 @@ The dashboard selects API calls based on role: Sales loads assigned leads and or
 
 ### Employee browser session behavior
 
-Employee login sets an HttpOnly `token` cookie on the API. The login response returns user identity fields but no JWT. The web app stores the user in local storage and stores the literal placeholder `http-only-cookie-session` under a `token` key; it is not a server credential. API authentication uses the cookie or a real Bearer token, not that local-storage placeholder. Initial auth state is restored from local storage without validating the cookie against the server.
+Employee login sets an HttpOnly `token` cookie on the API. The login response returns user identity fields but no JWT. The web app stores the user in local storage and stores the literal placeholder `http-only-cookie-session` under a `token` key; it is not a server credential. API authentication uses the cookie or a Bearer JWT, not that local-storage placeholder. Initial auth state is restored from local storage without validating the cookie against the server.
 
 The company portal has its own `CompanyAuthProvider` and stores the company profile in local storage after login; company API requests authenticate with the HttpOnly `companyToken` cookie. Like the employee provider, the company provider restores the saved profile locally rather than validating it against the server on page load.
 
@@ -229,9 +229,12 @@ All routes have employee authentication. There is no router-level warehouse/admi
 |---|---|
 | `GET /warehouse/get-stock-data` | Read product stock |
 | `GET /warehouse/get-order-list` | Read orders for fulfillment |
-| `POST /warehouse/export-order/:id` | Decrement inventory and process an order |
+| `POST /warehouse/export-order/:id` | Check stock, decrement inventory, change a placed order to `PROCESS`, and record an expense |
+| `POST /warehouse/deliver-order/:id` | Change a `PROCESS` order to `DELIVERED` |
 | `GET /warehouse/get-req-list` | Read stock requests |
 | `POST /warehouse/import-stock` | Submit a stock/import request |
+
+The warehouse UI supports inventory search and stock summaries, product creation for Admins, viewing/submitting stock requests, and processing/delivering orders from the shared Orders screen. The `export-order` handler currently performs stock and order updates before attempting an expense and wallet update; the wallet write uses fields not present in the Prisma schema. That later write can fail after earlier writes have succeeded, so this endpoint is not an atomic or reliable end-to-end fulfillment operation.
 
 ### Accounts — `/accounts`
 
@@ -264,7 +267,7 @@ Both routes have employee authentication. The controller permits Accounts and Ad
 
 The company portal provides sign-in/sign-up, an overview, team management, order listing, wallet balance/crediting, and a Plans & Billing screen. The billing screen lists active plans, directly selects a Free plan, and initializes Stripe checkout for an eligible paid Pro plan when the publishable key is configured. On `payment_intent.succeeded`, the webhook validates the local payment and plan, marks the payment successful, cancels existing company subscriptions, creates a new 30-day subscription, and updates the company's current `planId`. On `payment_intent.payment_failed`, it marks the matching pending payment as failed.
 
-Plan limits are implemented in [`apps/api/jobs/planLimiter.js`](./apps/api/jobs/planLimiter.js). It uses authenticated company context when available, resolves a sales employee's `memberOf` company for order limits, and falls back to a query company ID for other callers. It finds the active non-expired subscription, loads its plan details, and checks member, order, or balance usage. It is mounted on company member creation/addition, company wallet crediting, sales order creation, and legacy admin crediting. The limiter compares the company wallet's numeric balance plus requested amount against the plan's `Details.balance` limit. The current plan controller still submits `maxWallet`, which does not match that schema field (`balance`), so plan creation does not reliably create plan details. Subscription expiration code is scheduled separately; see [Background jobs and real-time behavior](#7-background-jobs-and-real-time-behavior).
+Plan limits are implemented in [`apps/api/jobs/planLimiter.js`](./apps/api/jobs/planLimiter.js). It uses authenticated company context when available, resolves a sales employee's `memberOf` company for order limits, and falls back to a query company ID for other callers. It finds the active non-expired subscription, loads its plan details, and checks member, order, or balance usage. It is mounted on company member creation/addition, company wallet crediting, sales order creation, and legacy admin crediting. The limiter compares the company wallet's numeric balance plus requested amount against the plan's `Details.balance` limit. The current plan controller still submits `maxWallet`, which does not match that schema field (`balance`), so plan creation can fail at Prisma validation. Subscription expiration code is scheduled separately; see [Background jobs and real-time behavior](#7-background-jobs-and-real-time-behavior).
 
 ## 6. Database model
 
@@ -300,7 +303,7 @@ The source of truth is [`packages/db/prisma/schema.prisma`](./packages/db/prisma
 | `Message` | UUID ID, text, creation timestamp, user and room relations; deleting its user or room cascades to messages. |
 | `Payment` | CUID ID, integer amount, currency defaulting to `usd`, status defaulting to `PENDING`, optional Stripe intent ID, creation time, optional company and plan relations; index on company, plan, and creation time. |
 | `Plan` | UUID ID, unique name, integer price, active flag, type defaulting to `FREE`, optional one-to-one details, companies, subscriptions, payments, creation time; index on creation time and ID. |
-| `Details` | UUID ID, integer `maxMember` and `maxOrder`, integer `balance` defaulting to zero, unique plan ID and plan relation. |
+| `Details` | UUID ID, integer `maxMember` and `maxOrder`, integer `balance` defaulting to 50,000, unique plan ID and plan relation. |
 | `Subscription` | UUID ID, status defaulting to `ACTIVE`, company and plan IDs, creation/start timestamps, optional cancellation/end timestamps, auto-updated timestamp; index on company and plan. |
 
 The company has a current plan pointer (`Company.planId`) in addition to subscription history. Subscription status belongs to `Subscription`, not `Plan`. Company routes can create a company-linked employee or connect an existing employee by ID; there is no invitation/token-based join flow.
@@ -332,14 +335,14 @@ The Swagger generator now includes employee, admin, warehouse, sales, company, p
 
 ### Subscription expiration
 
-[`apps/api/jobs/expireSubscriptionHandler.js`](./apps/api/jobs/expireSubscriptionHandler.js) schedules a scan every five minutes for active subscriptions whose `endAt` has passed. The handler attempts to mark expired subscriptions and restore the company's Free plan. This scheduled job runs when the API module is imported; it is not a separate worker process.
+[`apps/api/jobs/expireSubscriptionHandler.js`](./apps/api/jobs/expireSubscriptionHandler.js) schedules a scan every five minutes for active subscriptions whose `endAt` has passed. It attempts to mark them expired and restore the company's Free plan. When it finds another active subscription, the code calls `company.findMany` with an unsupported `data` argument; that Prisma error aborts the transaction, so the expiration and plan changes roll back. This scheduled job runs when the API module is imported; it is not a separate worker process.
 
 ## 8. Intended workflows and current completion
 
 1. **Company onboarding and administration:** A company can register and receives an active Free subscription if an active Free plan already exists. Company owners use a separate sign-in/sign-up flow and portal to view the company overview, create/list members, view company orders, review and add wallet funds, and select plans. Paid-plan checkout uses Stripe.js when configured; the signed webhook updates the subscription. The company member creation endpoint currently assigns a shared fixed password.
 2. **Employee onboarding:** The public employee registration endpoint accepts a role in the request body; the web form offers Sales, Warehouse, or Accounts, but not Admin. Company-authenticated routes also allow creating a member with a shared fixed password or connecting an existing employee by ID, subject to the member limiter.
 3. **Sales:** Admins can create and assign leads. A sales user can view leads assigned to them, update a lead status, and create orders using product IDs and quantities.
-4. **Warehouse:** Warehouse users can view orders and stock, submit stock requests, and process an order when product stock is sufficient. The handler decrements stock and updates order status.
+4. **Warehouse:** Warehouse users can view stock/orders, submit stock requests, process placed orders when product stock is sufficient, and mark processed orders delivered. The delivery endpoint updates the status; the processing endpoint can decrement stock and change status before failing during its incompatible wallet write, so it may return an error despite partial changes.
 5. **Request review:** Admins can view requests; the handler intends to compare the amount to the acting admin's wallet, then approve/debit or reject the request. This flow does not match the current company-only Wallet schema and is expected to fail until the wallet model or handler is aligned.
 6. **Accounts:** Accounts/Admin users can request a balance and nested sales records, including leads, orders, and expenses. The sales-list query is implemented; the balance query expects a user-wallet field that the current schema does not have, so it is not a working end-to-end account balance feature.
 7. **Chat:** An admin can create rooms and manage membership. Room members can retrieve messages and use Socket.IO messaging/read receipts.
@@ -357,10 +360,11 @@ These notes describe observed code behavior and should be revisited as fixes lan
 - **Profile password update:** The employee profile controller writes a supplied password directly rather than hashing it, unlike account creation/login.
 - **Order/company behavior:** Sales order creation now resolves the employee's `memberOf` company for the plan limiter and sets the required `Order.orderOf` field. The order endpoint can therefore create company-linked orders when the employee has a valid company association and active plan limits. The lead assignment check for order creation is enforced.
 - **Wallet schema mismatch:** `Wallet` only relates to Company via `balanceOf`; it has no `userId`. The request approval and account-balance controllers query `wallet.userId`, so those intended employee-wallet flows do not match the generated Prisma model. Company wallet crediting uses the supported `balanceOf` relation.
+- **Warehouse order processing is not atomic:** `exportOrder` decrements product stock and marks the order `PROCESS` before recording the expense and attempting a wallet upsert using the employee-wallet shape absent from the schema. A failed upsert can therefore return a server error after stock/order changes have committed. `POST /warehouse/deliver-order/:id` separately transitions only `PROCESS` orders to `DELIVERED`.
 - **Warehouse stock read authorization:** The stock handler's condition uses `role !== "ADMIN" || role !== "WAREHOUSE"`, which is always true for a single role; its subsequent negation therefore does not block unauthorized roles. Other warehouse handlers have their own and inconsistent checks.
 - **Lead status ownership:** The sales status-update handler checks the caller's Sales role but fetches/updates by lead ID without verifying that the lead is assigned to that user. The read and create-order paths do enforce assignment.
 - **Role checks are uneven:** The route guards in the web app are not security controls. Warehouse checks happen in individual handlers; Accounts controllers check Accounts/Admin; Sales checks are limited to selected handlers and status updates do not confirm lead ownership. Most admin routes apply the flawed admin middleware. The credit route now includes auth/admin middleware.
-- **Plan creation and subscription changes:** `POST /plans` has no authentication middleware. `POST /company/subscription` checks that the company and plan exist and that plan details exist, but does not check whether the plan is active, update `Company.planId`, or require payment. The plan controller accepts/creates `maxWallet`, while the current `Details` schema has `balance`, so plan creation does not match the schema.
+- **Plan creation and subscription changes:** `POST /plans` has no authentication middleware. `POST /company/subscription` checks that the company and plan exist and that plan details exist, but does not check whether the plan is active, update `Company.planId`, or require payment. The plan controller accepts/creates `maxWallet`, while the current `Details` schema has `balance`, so plan creation does not match the schema and can fail at Prisma validation.
 - **Plan limiter wiring:** `planLimiter` is mounted for company member routes, company wallet crediting, sales order creation, and legacy admin crediting. Company member/wallet routes use verified company context; sales order limits resolve the sales user's company association. The balance limit comparison uses the current numeric wallet balance, but plan creation's `maxWallet`/`Details.balance` mismatch means plan details may not be created as intended.
 - **Admin wallet UI/API mismatch:** The admin controller expects `POST /admin/credit-amount?id=<companyId>` with `{ "balance": <positive integer> }` and credits a company wallet. The web UI helper sends `{ "amount": ... }` and no company ID; it also describes the target as the admin wallet. The UI flow therefore cannot successfully call the current endpoint.
 - **Meeting deployment limits:** The browser and Socket.IO server implement meeting creation/join/leave, participant presence, screen sharing events, and WebRTC offer/answer/ICE signaling. Meeting state is process-local and media uses a public STUN server without TURN; meetings are not durable or horizontally scalable, and media connectivity can fail on restrictive networks.
