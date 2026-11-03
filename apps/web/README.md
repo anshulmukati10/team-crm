@@ -14,3 +14,16 @@ The React Compiler is not enabled on this template because of its impact on dev 
 ## Expanding the ESLint configuration
 
 If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+
+## Company owner portal
+
+Company owners can register and sign in separately from employee accounts at
+`/company/signup` and `/company/signin`. The portal provides a company overview,
+company-scoped member and order views, wallet balance/top-up, team-member
+creation, and plan/subscription management. Company dashboard data and wallet
+top-ups use company-authenticated API routes; wallet credits are checked against
+the current plan limit.
+
+Paid plan checkout uses Stripe.js. Configure the Stripe publishable key as
+`VITE_STRIPE_PUBLISHABLE_KEY` in the web app environment; card details are
+collected by Stripe and are not stored by the frontend.

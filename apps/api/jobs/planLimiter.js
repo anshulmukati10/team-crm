@@ -6,7 +6,20 @@ function planLimiter(resource) {
   return asyncHandler(async (req, res, next) => {
     try {
       // Prefer the authenticated company, not a client-supplied ID.
-      const companyId = req.company?.id || req.query.id;
+      let companyId = req.company?.id;
+
+      if (!companyId && resource === "order" && req.user?.id) {
+        const userId = Number(req.user.id);
+        if (Number.isInteger(userId) && userId > 0) {
+          const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { memberOf: true },
+          });
+          companyId = user?.memberOf;
+        }
+      } else if (!companyId && resource !== "order") {
+        companyId = req.query.id;
+      }
 
       if (!companyId) {
         return res.status(401).json({

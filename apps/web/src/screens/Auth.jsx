@@ -15,6 +15,12 @@ export default function Auth({ mode = "signin" }) {
         <span className="auth-kicker">TEAM CRM WORKSPACE</span>
         <h1>{isSignup ? "Create your profile" : "Welcome back"}</h1>
         {isSignup ? <RegisterForm /> : <LoginForm />}
+        <p className="auth-switch company-owner-link">
+          Company owner?{" "}
+          <Link to={isSignup ? "/company/signup" : "/company/signin"}>
+            {isSignup ? "Create your company" : "Open the owner portal"}
+          </Link>
+        </p>
       </section>
     </main>
   );

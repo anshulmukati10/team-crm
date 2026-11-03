@@ -74,6 +74,9 @@ export const createOrder = asyncHandler(async (req, res) => {
         if (salesUser.role !== 'SALES') {
             return res.status(403).json({ message: " not authorized as sales " })
         }
+        if (!salesUser.memberOf) {
+            return res.status(403).json({ message: "Sales user is not assigned to a company" })
+        }
         const { leadId, orderItems } = req.body
         if (typeof leadId !== 'string' || !leadId.trim()) {
             return res.status(400).json({ message: " lead id is required " })
@@ -115,6 +118,7 @@ export const createOrder = asyncHandler(async (req, res) => {
                 total: totalPrice,
                 leadId: leadId,
                 salesId: numericID,
+                orderOf: salesUser.memberOf,
                 orderItems: {
                     create: lineItems,
                 }

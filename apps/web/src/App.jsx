@@ -1,6 +1,13 @@
 import { Navigate, Route, Routes } from "react-router";
+import CompanyLayout from "./components/CompanyLayout";
 import Layout from "./components/Layout";
 import { ROLES, useAuth } from "./context/WorkspaceContext";
+import CompanyAuth from "./features/company/CompanyAuth";
+import CompanyBilling from "./features/company/CompanyBilling";
+import CompanyDashboard from "./features/company/CompanyDashboard";
+import CompanyOrders from "./features/company/CompanyOrders";
+import CompanyTeam from "./features/company/CompanyTeam";
+import CompanyWallet from "./features/company/CompanyWallet";
 import ManageRequests from "./features/admin/manageRequest";
 import UserManagement from "./features/admin/userManagment";
 import Lead from "./features/sales/Lead";
@@ -79,6 +86,22 @@ export default function App() {
         <Route path="profile" element={<Profile />} />
       </Route>
       <Route path="/meetings/:meetingId" element={<MeetingRoomRoute />} />
+      <Route
+        path="/company/signin"
+        element={<CompanyAuth mode="signin" />}
+      />
+      <Route
+        path="/company/signup"
+        element={<CompanyAuth mode="signup" />}
+      />
+      <Route path="/company" element={<CompanyLayout />}>
+        <Route index element={<CompanyDashboard />} />
+        <Route path="dashboard" element={<CompanyDashboard />} />
+        <Route path="team" element={<CompanyTeam />} />
+        <Route path="orders" element={<CompanyOrders />} />
+        <Route path="wallet" element={<CompanyWallet />} />
+        <Route path="subscription" element={<CompanyBilling />} />
+      </Route>
       <Route path="/signin" element={<Auth mode="signin" />} />
       <Route path="/signup" element={<Auth mode="signup" />} />
       <Route path="*" element={<Navigate to="/" replace />} />
