@@ -65,6 +65,7 @@ const operationTags = {
     '/get-stock-data': 'Warehouse',
     '/get-order-list': 'Warehouse',
     '/export-order/{id}': 'Warehouse',
+    '/deliver-order/{id}': 'Warehouse',
     '/get-req-list': 'Warehouse',
     '/import-stock': 'Warehouse',
     '/create-order': 'Sales',
@@ -115,4 +116,3 @@ catch (err) {
     console.error('Swagger specification generation failed:', err)
     process.exitCode = 1
 }
-

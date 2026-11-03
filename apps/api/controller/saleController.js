@@ -105,7 +105,7 @@ export const createOrder = asyncHandler(async (req, res) => {
             totalPrice += product.price * item.quantity
 
             lineItems.push({
-                id: `ORDER_ITEM${String(++i)}`,
+        
                 quantity: item.quantity,
                 price: product.price,
                 productId: product.id
@@ -114,7 +114,7 @@ export const createOrder = asyncHandler(async (req, res) => {
         
         await prisma.order.create({
             data: {
-                id: `ORD_${Date.now()}`,
+            
                 total: totalPrice,
                 leadId: leadId,
                 salesId: numericID,

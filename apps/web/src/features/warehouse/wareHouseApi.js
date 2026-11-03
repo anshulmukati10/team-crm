@@ -48,6 +48,17 @@ export async function exportWarehouseOrder(orderId) {
   }
 }
 
+export async function deliverWarehouseOrder(orderId) {
+  try {
+    const response = await getWarehouseApi().post(
+      `/deliver-order/${encodeURIComponent(orderId)}`,
+    );
+    return response.data;
+  } catch (error) {
+    rethrowApiError(error, "Unable to update this order status.");
+  }
+}
+
 export async function getWarehouseRequests() {
   try {
     const response = await getWarehouseApi().get("/get-req-list");

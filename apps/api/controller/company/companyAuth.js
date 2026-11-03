@@ -261,7 +261,7 @@ export const currentSubscription = asyncHandler(async (req, res) => {
             },
         });
 
-        console.log("Company subscriptions:", subscriptions);
+        // console.log("Company subscriptions:", subscriptions);
         return res.json(subscriptions)
     } catch (error) {
         console.log(error)

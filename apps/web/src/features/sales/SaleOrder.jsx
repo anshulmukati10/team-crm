@@ -14,6 +14,7 @@ import {
   getSalesOrders,
 } from "./salesApi";
 import {
+  deliverWarehouseOrder,
   exportWarehouseOrder,
   getWarehouseOrders,
   getWarehouseStock,
@@ -157,6 +158,21 @@ export default function Orders() {
     }
   }
 
+  async function handleMarkDelivered(orderId) {
+    setProcessingId(orderId);
+    setError("");
+    setNotice("");
+    try {
+      await deliverWarehouseOrder(orderId);
+      setNotice(`Order ${orderId} was marked delivered.`);
+      await loadOrders();
+    } catch (updateError) {
+      setError(getErrorMessage(updateError));
+    } finally {
+      setProcessingId(null);
+    }
+  }
+
   const openCount = orders.filter(
     (order) => !["DELIVERED", "FULFILLED"].includes(String(order.status).toUpperCase()),
   ).length;
@@ -243,6 +259,15 @@ export default function Orders() {
                           type="button"
                         >
                           {processingId === order.id ? "Processing…" : "Process order"}
+                        </button>
+                      ) : String(order.status).toUpperCase() === "PROCESS" ? (
+                        <button
+                          className="text-button"
+                          disabled={processingId !== null}
+                          onClick={() => handleMarkDelivered(order.id)}
+                          type="button"
+                        >
+                          {processingId === order.id ? "Updating…" : "Mark delivered"}
                         </button>
                       ) : <span />,
                     ]

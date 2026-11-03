@@ -14,10 +14,10 @@ export const createProduct = asyncHandler(async (req, res) => {
             return res.status(400).json({ message: "product already exist " })
         }
         const count = await prisma.product.count()
-        const id = 'PROD' + String(count + 1);
+        
         await prisma.product.create({
             data: {
-                id: id,
+                
                 name: name,
                 price: price,
                 stock: stock
@@ -129,12 +129,12 @@ export const createLead = asyncHandler(async (req, res) => {
             return res.status(409).json({ message: "lead already exist" })
         }
 
-        const leadId = 'LEAD_' + String(Date.now())
+        
         await prisma.lead.create(
             {
                 data:
                 {
-                    id: leadId,
+                   
                     name: name,
                     phone: phone,
                     salesId: salesId

@@ -71,6 +71,12 @@ export const exportOrder = asyncHandler(async (req, res) => {
         }
         const orderId = req.params.id
         const order = await prisma.order.findUnique({ where: { id: orderId }, include: { orderItems: true } })
+        if (!order) {
+            return res.status(404).json({ message: "Order not found" })
+        }
+        if (order.status !== 'PLACED') {
+            return res.status(409).json({ message: "Only placed orders can be processed" })
+        }
         const orderItems = order.orderItems;
         for (let item of orderItems) {
             const product = await prisma.product.findUnique({ where: { id: item.productId } })
@@ -86,7 +92,10 @@ export const exportOrder = asyncHandler(async (req, res) => {
                 }
             })
         }
-        await prisma.order.update({ where: { id: orderId }, data: { status: 'PROCESS' } })
+        const processedOrder = await prisma.order.update({
+            where: { id: orderId },
+            data: { status: 'PROCESS' }
+        })
         const expense = await prisma.expenses.create({
             data: {
                 id: `EXP_${Date.now()}`,
@@ -96,16 +105,53 @@ export const exportOrder = asyncHandler(async (req, res) => {
             }
         })
         await prisma.wallet.upsert({
-            where: { userId: order.salesId },
+            where: { balanceOf : order.salesId.memberOf },
             update: { balance: { increment: order.total } },
             create: { userId: order.salesId, balance: order.total }
         })
         emitWorkspaceUpdate()
         
-        return res.status(200).json({ message: ` order status ${order.status}` })
+        return res.status(200).json({ message: ` order status ${processedOrder.status}` })
     } catch (error) {
         console.error(error)
         return res.status(500).json({ message: " Error in exporting order" })
+    }
+})
+
+export const deliverWarehouseOrder = asyncHandler(async (req, res) => {
+    try {
+        const userId = Number(req.user?.id)
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { role: true }
+        })
+        if (!user) {
+            return res.status(401).json({ message: "User not found" })
+        }
+        if (user.role !== 'WAREHOUSE') {
+            return res.status(403).json({ message: "Not authorized to update order status" })
+        }
+
+        const result = await prisma.order.updateMany({
+            where: { id: req.params.id, status: 'PROCESS' },
+            data: { status: 'DELIVERED' }
+        })
+        if (result.count === 0) {
+            const order = await prisma.order.findUnique({
+                where: { id: req.params.id },
+                select: { id: true }
+            })
+            if (!order) {
+                return res.status(404).json({ message: "Order not found" })
+            }
+            return res.status(409).json({ message: "Only processed orders can be marked delivered" })
+        }
+
+        emitWorkspaceUpdate()
+        return res.status(200).json({ message: "Order marked delivered" })
+    } catch (error) {
+        console.error(error)
+        return res.status(500).json({ message: "Unable to update order status" })
     }
 })
 
