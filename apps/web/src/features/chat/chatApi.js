@@ -73,10 +73,12 @@ export const addMember = async ({ roomId, userId }) => {
 };
 
 
-export const upload = async(data) =>
+export const upload = async(data, onUploadProgress) =>
 {
   try {
-     const response = await axios.post(`${API_BASE}/auth/upload` , data);
+     const response = await axios.post(`${API_BASE}/auth/upload` , data, {
+       onUploadProgress,
+     });
      return response?.data
   } catch (error) {
     throw error?.response?.data?.message ||

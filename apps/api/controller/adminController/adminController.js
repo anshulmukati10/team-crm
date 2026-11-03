@@ -457,13 +457,14 @@ export const getBalance = asyncHandler(async (req, res) => {
     try {
         const id = Number.parseInt(req.user.id)
         if (!id) return res.status(401).json({ message: " required id " })
+            const user = await prisma.user.findUnique({where : { id : id }})
         const amount = await prisma.wallet.findUnique({
             select:
             {
                 balance: true,
             },
             where: {
-                userId: id
+                balanceOf: user.memberOf
             }
         })
         return res.json(amount)
@@ -519,7 +520,7 @@ export const addUserToGroup = asyncHandler(async (req, res) => {
         const user = await prisma.user.findUnique({
             where:
             {
-                id: numericUserId,
+                id: numericUserId, 
             }
         })
         if (!user) return res.json({ message: " room is missing  " })

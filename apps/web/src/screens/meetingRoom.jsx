@@ -1,20 +1,24 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import {
   FiArrowLeft,
   FiCheck,
+  FiCircle,
   FiCopy,
   FiMic,
   FiMicOff,
   FiMonitor,
   FiMoreHorizontal,
   FiPhoneOff,
+  FiSquare,
   FiUsers,
   FiVideo,
   FiVideoOff,
 } from "react-icons/fi";
 import { initials } from "../components/ui/Navbar";
 import { useAuth } from "../context/WorkspaceContext";
+import { upload } from "../features/chat/chatApi";
+import { startMeetingRecording } from "../features/meeting/meetingRecording";
 import useWebRTC from "../features/meeting/webRTC";
 
 function formatDuration(seconds) {
@@ -82,6 +86,29 @@ export default function MeetingRoom() {
   const [peopleOpen, setPeopleOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [recordingStatus, setRecordingStatus] = useState("idle");
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [recordingUrl, setRecordingUrl] = useState("");
+  const [recordingError, setRecordingError] = useState("");
+  const recordingSessionRef = useRef(null);
+  const recordingStartPendingRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  const recordingSources = useMemo(
+    () => [
+      { id: "local", name: user.name || "You", stream: localStream },
+      ...participants.map((participant) => ({
+        id: participant.socketId,
+        name: participant.name || "Team member",
+        stream: participant.stream,
+      })),
+    ],
+    [localStream, participants, user.name],
+  );
+  const canRecord = recordingSources.some(({ stream }) =>
+    stream?.getTracks().some((track) => track.readyState === "live"),
+  );
 
   useEffect(() => {
     const intervalId = window.setInterval(
@@ -97,6 +124,28 @@ export default function MeetingRoom() {
     setCameraEnabled(localStream.getVideoTracks().some((track) => track.enabled));
     setMicrophoneEnabled(localStream.getAudioTracks().some((track) => track.enabled));
   }, [localStream]);
+
+  useEffect(() => {
+    recordingSessionRef.current?.updateSources(recordingSources);
+  }, [recordingSources]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      recordingSessionRef.current?.dispose();
+      recordingSessionRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (recordingStatus !== "recording") return undefined;
+    const intervalId = window.setInterval(
+      () => setRecordingSeconds((seconds) => seconds + 1),
+      1000,
+    );
+    return () => window.clearInterval(intervalId);
+  }, [recordingStatus]);
 
   async function copyMeetingLink() {
     try {
@@ -118,6 +167,94 @@ export default function MeetingRoom() {
       track.enabled = nextEnabled;
     });
     setEnabled(nextEnabled);
+  }
+
+  async function handleStartRecording() {
+    if (
+      recordingSessionRef.current ||
+      recordingStartPendingRef.current ||
+      recordingStatus === "starting" ||
+      recordingStatus === "processing" ||
+      recordingStatus === "uploading" ||
+      !canRecord
+    ) {
+      return;
+    }
+
+    recordingStartPendingRef.current = true;
+    setRecordingStatus("starting");
+    setRecordingSeconds(0);
+    setUploadProgress(0);
+    setRecordingUrl("");
+    setRecordingError("");
+    try {
+      const session = await startMeetingRecording(recordingSources, (recordingFailure) => {
+        if (!mountedRef.current) return;
+        recordingSessionRef.current = null;
+        setRecordingError(
+          recordingFailure?.message || "The meeting recording failed unexpectedly.",
+        );
+        setRecordingStatus("error");
+      });
+      if (!mountedRef.current) {
+        session.dispose();
+        return;
+      }
+      recordingSessionRef.current = session;
+      setRecordingStatus("recording");
+    } catch (startError) {
+      if (!mountedRef.current) return;
+      setRecordingError(startError?.message || String(startError));
+      setRecordingStatus("error");
+    } finally {
+      recordingStartPendingRef.current = false;
+    }
+  }
+
+  async function handleStopRecording() {
+    const session = recordingSessionRef.current;
+    if (!session || recordingStatus !== "recording") return;
+
+    recordingSessionRef.current = null;
+    setRecordingStatus("processing");
+    setRecordingError("");
+    try {
+      const blob = await session.stop();
+      session.dispose();
+      if (!mountedRef.current) return;
+      if (!blob.size) throw new Error("The recording did not contain any media.");
+
+      const extension = blob.type.includes("mp4") ? "mp4" : "webm";
+      const file = new File(
+        [blob],
+        `meeting-${meetingId}-${Date.now()}.${extension}`,
+        { type: blob.type || `video/${extension}` },
+      );
+      const formData = new FormData();
+      formData.append("avatar", file);
+
+      setRecordingStatus("uploading");
+      setUploadProgress(0);
+      const result = await upload(formData, (event) => {
+        if (mountedRef.current && event.total) {
+          setUploadProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+        }
+      });
+      const url = result?.secure_url || result?.url;
+      if (result?.success !== true || !url) {
+        throw new Error(result?.message || "Cloudinary did not return a recording URL.");
+      }
+
+      if (!mountedRef.current) return;
+      setRecordingUrl(url);
+      setUploadProgress(100);
+      setRecordingStatus("success");
+    } catch (stopError) {
+      session.dispose();
+      if (!mountedRef.current) return;
+      setRecordingError(stopError?.message || String(stopError));
+      setRecordingStatus("error");
+    }
   }
 
   const meetingName = `Meeting ${meetingId.slice(0, 8)}`;
@@ -175,6 +312,49 @@ export default function MeetingRoom() {
         <div className="meeting-room-alert" role="status" aria-live="polite">
           <span>{screenShareNotification.message}</span>
         </div>
+      )}
+      {recordingStatus !== "idle" && (
+        <section
+          aria-live="polite"
+          className={`meeting-recording-banner meeting-recording-${recordingStatus}`}
+          role={recordingStatus === "error" ? "alert" : "status"}
+        >
+          <div className="meeting-recording-message">
+            {recordingStatus === "recording" && (
+              <span className="meeting-recording-indicator" aria-hidden="true" />
+            )}
+            <strong>
+              {recordingStatus === "starting" && "Starting recording…"}
+              {recordingStatus === "recording" && "Recording"}
+              {recordingStatus === "processing" && "Preparing recording…"}
+              {recordingStatus === "uploading" && "Uploading recording"}
+              {recordingStatus === "success" && "Recording uploaded successfully"}
+              {recordingStatus === "error" && "Recording failed"}
+            </strong>
+            {recordingStatus === "recording" && (
+              <time>{formatDuration(recordingSeconds)}</time>
+            )}
+            {recordingStatus === "uploading" && <span>{uploadProgress}%</span>}
+            {recordingStatus === "error" && <span>{recordingError}</span>}
+          </div>
+          {recordingStatus === "uploading" && (
+            <progress
+              aria-label="Recording upload progress"
+              max="100"
+              value={uploadProgress}
+            />
+          )}
+          {recordingUrl && recordingStatus === "success" && (
+            <a
+              className="meeting-recording-link"
+              href={recordingUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Open recording
+            </a>
+          )}
+        </section>
       )}
 
       <div className={`meeting-room-content${peopleOpen ? " people-panel-open" : ""}`}>
@@ -261,6 +441,33 @@ export default function MeetingRoom() {
           >
             <FiMonitor size={19} />
             <span>{screenStream ? "Stop sharing" : "Share screen"}</span>
+          </button>
+          <button
+            aria-label={recordingStatus === "recording" ? "Stop recording" : "Start recording"}
+            aria-pressed={recordingStatus === "recording"}
+            className={`meeting-control meeting-record-control${recordingStatus === "recording" ? " is-recording" : ""}`}
+            disabled={
+              recordingStatus === "recording"
+                ? false
+                : !canRecord ||
+                  status !== "joined" ||
+                  ["starting", "processing", "uploading"].includes(recordingStatus)
+            }
+            onClick={
+              recordingStatus === "recording"
+                ? handleStopRecording
+                : handleStartRecording
+            }
+            type="button"
+          >
+            {recordingStatus === "recording" ? <FiSquare size={18} /> : <FiCircle size={19} />}
+            <span>
+              {recordingStatus === "recording"
+                ? "Stop recording"
+                : recordingStatus === "starting"
+                  ? "Starting…"
+                  : "Start recording"}
+            </span>
           </button>
           <button
             aria-label="Leave meeting"
