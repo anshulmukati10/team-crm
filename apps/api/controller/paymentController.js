@@ -2,6 +2,118 @@ import asyncHandler from "../middleware/asyncMiddleware.js"
 import stripe from '../config/stripe.js'
 import { prisma } from '../config/prismaClient.js'
 
+async function activatePaidSubscription(intent, expectedCompanyId) {
+    const { paymentId, companyId, planId } = intent.metadata ?? {};
+    if (!paymentId || !companyId || !planId) {
+        const error = new Error("Payment metadata is incomplete");
+        error.status = 400;
+        throw error;
+    }
+
+    if (expectedCompanyId && companyId !== expectedCompanyId) {
+        const error = new Error("Payment does not belong to this company");
+        error.status = 403;
+        throw error;
+    }
+
+    const payment = await prisma.payment.findFirst({
+        where: {
+            id: paymentId,
+            companyId,
+            planId,
+            stripeIntentsId: intent.id
+        }
+    });
+
+    if (!payment) {
+        const error = new Error("Payment record not found");
+        error.status = 404;
+        throw error;
+    }
+    if (intent.amount !== payment.amount || intent.currency !== payment.currency) {
+        const error = new Error("Payment amount or currency does not match");
+        error.status = 400;
+        throw error;
+    }
+
+    return prisma.$transaction(async (tx) => {
+        const claimedPayment = await tx.payment.updateMany({
+            where: {
+                id: paymentId,
+                companyId,
+                planId,
+                stripeIntentsId: intent.id,
+                status: { in: ["PENDING", "FAIL"] }
+            },
+            data: { status: "SUCCESS" }
+        });
+
+        if (claimedPayment.count === 0) {
+            const currentPayment = await tx.payment.findUnique({
+                where: { id: paymentId },
+                select: { status: true }
+            });
+
+            return {
+                alreadyProcessed: currentPayment?.status === "SUCCESS",
+                notEligible: currentPayment?.status !== "SUCCESS"
+            };
+        }
+
+        const plan = await tx.plan.findFirst({
+            where: {
+                id: planId,
+                isActive: true,
+                type: "PRO",
+                price: { gt: 0 }
+            }
+        });
+        if (!plan) {
+            throw new Error("The paid plan is no longer active");
+        }
+
+        const company = await tx.company.findUnique({
+            where: { id: companyId }
+        });
+        if (!company) {
+            throw new Error("The company for this payment was not found");
+        }
+
+        const now = new Date();
+        const end = new Date(now);
+        end.setDate(end.getDate() + 30);
+
+        await tx.subscription.updateMany({
+            where: { companyId },
+            data: {
+                status: "CANCEL",
+                endAt: now,
+                canceledAt: now,
+            }
+        });
+
+        const subscription = await tx.subscription.create({
+            data: {
+                companyId: company.id,
+                planId: plan.id,
+                endAt: end,
+                createdAt: now
+            }
+        });
+
+        await tx.company.update({
+            where: { id: companyId },
+            data: { planId: plan.id }
+        });
+
+        return {
+            alreadyProcessed: false,
+            notEligible: false,
+            subscriptionId: subscription.id,
+            endAt: end
+        };
+    });
+}
 
 export const paymentAccept = asyncHandler(async (req, res) => {
     let payment;
@@ -93,6 +205,45 @@ export const paymentAccept = asyncHandler(async (req, res) => {
     }
 })
 
+export const confirmPayment = asyncHandler(async (req, res) => {
+    const companyId = req.company?.id;
+    const { paymentId } = req.body;
+
+    if (!companyId || !paymentId) {
+        return res.status(400).json({ message: "paymentId is required" });
+    }
+
+    try {
+        const payment = await prisma.payment.findFirst({
+            where: { id: paymentId, companyId }
+        });
+        if (!payment?.stripeIntentsId) {
+            return res.status(404).json({ message: "Payment record not found" });
+        }
+
+        const intent = await stripe.paymentIntents.retrieve(payment.stripeIntentsId);
+        if (intent.status !== "succeeded") {
+            return res.status(409).json({ message: "Payment has not succeeded" });
+        }
+
+        const result = await activatePaidSubscription(intent, companyId);
+        if (result.notEligible) {
+            return res.status(409).json({ message: "Payment is not eligible for processing" });
+        }
+
+        return res.status(200).json({
+            message: result.alreadyProcessed
+                ? "Payment was already processed"
+                : "Subscription activated",
+            subscriptionId: result.subscriptionId
+        });
+    } catch (error) {
+        console.error("Unable to confirm payment:", error);
+        return res.status(error.status || 500).json({
+            message: error.status ? error.message : "Unable to activate subscription"
+        });
+    }
+});
 
 
 
@@ -132,141 +283,55 @@ export const stripeWebhookHandler = asyncHandler(async (req, res) => {
     try {
         const intent = event.data.object;
         if (event.type === 'payment_intent.succeeded') {
-            const { paymentId, companyId, planId } = intent.metadata ?? {}
-            if (!paymentId) {
-                return res.status(401).json({ message: "payment id is missing " })
+            const result = await activatePaidSubscription(intent);
+
+            if (result.alreadyProcessed) {
+                return res.status(200).json({
+                    message: "Payment was already processed",
+                    alreadyProcessed: true
+                });
+            }
+            if (result.notEligible) {
+                return res.status(200).json({
+                    message: "Payment is not eligible for processing"
+                });
             }
 
-            const payment = await prisma.payment.findFirst({
-                where:
-                {
-                    id: paymentId,
-                    companyId,
-                    planId,
-                    stripeIntentsId: intent.id
-                }
-
-            })
-
-            if (!payment) {
-                return res.status(401).json({ message: " company payment not found " })
-            }
-            if (intent.amount !== payment.amount || intent.currency !== payment.currency) {
-                return res.status(400).json({ message: " check curreny and amount " })
-            }
-
-
-            const result = await prisma.$transaction(async (tx) => {
-                const currentPayment = await tx.payment.findFirst({
-                    where: {
-                        id: paymentId,
-                    }
-                })
-                if (currentPayment.status === "SUCCESS") return res.json({ message: " payment already process ", alreadyProcessed: true })
-
-                if (currentPayment.status !== "PENDING") return res.json({ message: " payment is not pending  solve issue or try again ", notPending: true })
-
-                const plan = await tx.plan.findFirst({
-                    where:
-                    {
-                        id: planId,
-                        isActive: true,
-                        type: "PRO",
-                        price: { gt: 0 }
-                    }
-                })
-                if (!plan) return res.json({ message: " plan not found " })
-
-                const company = await tx.company.findUnique({
-                    where:
-                    {
-                        id: companyId
-                    }
-                })
-                if (!company) return res.json({ message: " company not found " })
-
-                const now = new Date();
-                const end = new Date(now);
-                end.setDate(end.getDate() + 30)
-
-                await tx.payment.updateMany({
-                    where:
-                    {
-                        id: paymentId
-                    },
-                    data:
-                    {
-                        status: "SUCCESS"
-                    }
-                })
-
-
-                await tx.subscription.updateMany({
-                    where: {
-                        companyId,
-                    },
-                    data:
-                    {
-                        status: "CANCEL",
-                        endAt: now,
-                        canceledAt: now,
-                    }
-                })
-
-                const subscription = await tx.subscription.create({
-                    data:
-                    {
-                        companyId: company.id,
-                        planId: plan.id,
-                        endAt: end,
-                        createdAt: now
-                    }
-                })
-
-                await tx.company.update({
-                    where: { id: companyId },
-                    data: { planId: plan.id }
-                })
-
-                return {
-                    alreadyProcessed: false,
-                    subscriptionId: subscription.id,
-                    endAt: end
-                }
-
-            })
-
-            return res.json({ message: (result.alreadyProcessed) ? " payment already processed " : " new subscription created ", ...result })
+            return res.status(200).json({
+                message: "Subscription created",
+                subscriptionId: result.subscriptionId,
+                endAt: result.endAt
+            });
 
         }
 
         if (event.type === 'payment_intent.payment_failed') {
             const { paymentId, companyId, planId } = intent.metadata ?? {};
+            if (!paymentId || !companyId || !planId) {
+                return res.status(400).json({ message: "Payment metadata is incomplete" });
+            }
+
             const failedPayment = await prisma.payment.updateMany({
-                where:
-                {
+                where: {
                     id: paymentId,
                     stripeIntentsId: intent.id,
                     companyId,
                     planId,
                     status: 'PENDING'
                 },
-                data:
-                {
-                    status: 'FAIL'
-                }
-            })
+                data: { status: 'FAIL' }
+            });
 
             return res.status(200).json({
                 message: failedPayment.count
-                    ? "Payment marked as failed"
+                    ? "Payment attempt marked as failed; it may still be retried"
                     : "No pending payment matched",
                 count: failedPayment.count
             });
         }
         return res.sendStatus(200);
     } catch (err) {
-        console.log(err)
+        console.error("Stripe webhook processing failed:", err);
         return res.status(500).json({ message: `Error ${err.message}` })
     }
 })

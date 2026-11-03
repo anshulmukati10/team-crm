@@ -12,7 +12,8 @@ import {
     creditCompanyWallet,
     getCompanyMembers,
     getCompanyOrders,
-    getCompanyWallet
+    getCompanyWallet,
+    getRecordings
 } from "../../controller/company/companyAdminController.js";
 
 import companyAuthMiddleware from '../../middleware/companyAuthMiddleware.js'
@@ -32,6 +33,7 @@ router.post('/wallet/credit', companyAuthMiddleware, company, planLimiter("balan
 router.get('/orders', companyAuthMiddleware, company, getCompanyOrders)
 router.get('/subscription' , companyAuthMiddleware , company , currentSubscription )
 router.post('/subscription' , companyAuthMiddleware , company , createSubscription )
+router.get('/get-recordings' ,  companyAuthMiddleware , company , getRecordings)
 
 
 export default router ;

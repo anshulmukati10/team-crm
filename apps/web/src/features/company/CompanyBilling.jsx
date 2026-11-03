@@ -3,6 +3,7 @@ import { Icon, PageHeading } from "../../components/ui/Navbar";
 import { useCompanyAuth } from "../../context/CompanyAuthContext";
 import {
   createCompanyPayment,
+  confirmCompanyPayment,
   getCompanyPlans,
   getCompanySubscriptions,
   subscribeCompany,
@@ -118,7 +119,7 @@ function StripeCardForm({ checkout, companyEmail, onComplete, onCancel }) {
       if (result.paymentIntent?.status !== "succeeded") {
         throw new Error("The payment has not completed yet.");
       }
-      await onComplete();
+      await onComplete(checkout);
     } catch (confirmError) {
       setError(confirmError.message || "The payment could not be confirmed.");
     } finally {
@@ -233,6 +234,7 @@ export default function CompanyBilling() {
         }
         setCheckout({
           clientSecret: payment.client,
+          paymentId: payment.paymentId,
           plan,
         });
       }
@@ -243,10 +245,17 @@ export default function CompanyBilling() {
     }
   }
 
-  async function handlePaymentComplete() {
+  async function handlePaymentComplete(completedCheckout) {
+    await confirmCompanyPayment(completedCheckout.paymentId);
     setCheckout(null);
-    setNotice("Payment confirmed. Your subscription will update after payment processing completes.");
-    await loadBilling();
+    const billing = await loadBilling();
+    if (!billing) {
+      setNotice(
+        `${completedCheckout.plan.name} is active, but the billing details could not be refreshed.`,
+      );
+      return;
+    }
+    setNotice(`${completedCheckout.plan.name} is now active.`);
   }
 
   return (

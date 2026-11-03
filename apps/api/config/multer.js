@@ -1,5 +1,7 @@
 import multer from 'multer'
 import cloudinary from 'cloudinary'
+import {prisma} from './prismaClient.js'
+
 
 cloudinary.config({
     cloud_name: process.env.CLOUD_NAME,
@@ -19,8 +21,37 @@ export const multerController = async (req, res) => {
         })
     }
 
+    const userId = Number(req.user?.id)
+    if (!Number.isSafeInteger(userId) || userId <= 0) {
+        return res.status(401).json({
+            success: false,
+            message: "User authentication required.",
+        })
+    }
+
+    let user
+    try {
+        user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { memberOf: true },
+        })
+    } catch (error) {
+        console.error("Unable to find recording owner:", error)
+        return res.status(500).json({
+            success: false,
+            message: "Unable to verify recording owner.",
+        })
+    }
+
+    if (!user?.memberOf) {
+        return res.status(403).json({
+            success: false,
+            message: "Recordings can only be uploaded by a company team member.",
+        })
+    }
+
     const uploadStream = cloudinary.uploader.upload_stream(
-        (result) => {
+        async (result) => {
             if (result?.error) {
                 console.error("Cloudinary upload failed:", result.error.message || result.error)
                 return res.status(502).json({
@@ -34,6 +65,20 @@ export const multerController = async (req, res) => {
                 return res.status(502).json({
                     success: false,
                     message: "Cloudinary did not return the uploaded file details.",
+                })
+            }
+            try {
+                await prisma.recordings.create({
+                    data: {
+                        companyId: user.memberOf,
+                        url: result.secure_url,
+                    }
+                })
+            } catch (error) {
+                console.error("Unable to save uploaded recording:", error)
+                return res.status(500).json({
+                    success: false,
+                    message: "The recording uploaded but could not be saved to the company.",
                 })
             }
 

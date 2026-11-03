@@ -91,6 +91,17 @@ export async function createCompanyPayment(planId) {
   }
 }
 
+export async function confirmCompanyPayment(paymentId) {
+  try {
+    const response = await axios.post(`${getApiBase()}/payment/confirm-payment`, {
+      paymentId,
+    });
+    return response.data;
+  } catch (error) {
+    throw getError(error, "Unable to activate your subscription.");
+  }
+}
+
 export async function createCompanyMember(member) {
   try {
     const response = await axios.post(
@@ -147,5 +158,17 @@ export async function getCompanyOrders() {
     return response.data;
   } catch (error) {
     throw getError(error, "Unable to load company orders.");
+  }
+}
+
+export async function getCompanyRecordings() {
+  try {
+    const response = await axios.get(`${getApiBase()}/company/get-recordings`);
+    if (!Array.isArray(response.data)) {
+      throw new Error("The company recordings service returned an invalid response.");
+    }
+    return response.data;
+  } catch (error) {
+    throw getError(error, "Unable to load company recordings.");
   }
 }

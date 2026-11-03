@@ -76,10 +76,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Payments"
-        ]
+        }
       }
     },
     "/register": {
@@ -89,10 +86,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Authentication"
-        ]
+        }
       }
     },
     "/login": {
@@ -102,10 +96,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Authentication"
-        ]
+        }
       }
     },
     "/logout": {
@@ -115,10 +106,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Authentication"
-        ]
+        }
       }
     },
     "/delete-user": {
@@ -128,10 +116,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Authentication"
-        ]
+        }
       }
     },
     "/chat/{id}/messages": {
@@ -141,10 +126,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Chat"
-        ]
+        }
       }
     },
     "/profile": {
@@ -154,10 +136,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Profile"
-        ]
+        }
       },
       "put": {
         "description": "",
@@ -165,10 +144,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Profile"
-        ]
+        }
       }
     },
     "/get-rooms": {
@@ -178,10 +154,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Chat"
-        ]
+        }
       }
     },
     "/upload": {
@@ -191,10 +164,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Profile"
-        ]
+        }
       }
     },
     "/product/create-product": {
@@ -204,10 +174,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Admin - Product"
-        ]
+        }
       }
     },
     "/product/delete-product": {
@@ -217,10 +184,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Admin - Product"
-        ]
+        }
       }
     },
     "/product/update-product/{id}": {
@@ -230,10 +194,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Admin - Product"
-        ]
+        }
       }
     },
     "/lead/create-lead": {
@@ -243,10 +204,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Admin - Lead"
-        ]
+        }
       }
     },
     "/lead/delete-lead": {
@@ -256,10 +214,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Admin - Lead"
-        ]
+        }
       }
     },
     "/lead": {
@@ -269,10 +224,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Admin - Lead"
-        ]
+        }
       },
       "put": {
         "description": "",
@@ -280,10 +232,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Admin - Lead"
-        ]
+        }
       }
     },
     "/get-request": {
@@ -293,10 +242,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Admin - Requests"
-        ]
+        }
       }
     },
     "/credit-amount": {
@@ -306,10 +252,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Admin - Accounts"
-        ]
+        }
       }
     },
     "/handle-request": {
@@ -319,10 +262,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Admin - Requests"
-        ]
+        }
       }
     },
     "/room": {
@@ -332,10 +272,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Admin - Chat"
-        ]
+        }
       },
       "delete": {
         "description": "",
@@ -343,10 +280,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Admin - Chat"
-        ]
+        }
       },
       "put": {
         "description": "",
@@ -354,10 +288,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Admin - Chat"
-        ]
+        }
       }
     },
     "/get-all-user": {
@@ -367,10 +298,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Admin - Users"
-        ]
+        }
       }
     },
     "/balance": {
@@ -380,10 +308,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Admin - Accounts"
-        ]
+        }
       }
     },
     "/delete-room": {
@@ -393,10 +318,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Admin - Chat"
-        ]
+        }
       }
     },
     "/get-stock-data": {
@@ -406,10 +328,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Warehouse"
-        ]
+        }
       }
     },
     "/get-order-list": {
@@ -419,10 +338,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Warehouse"
-        ]
+        }
       }
     },
     "/export-order/{id}": {
@@ -432,10 +348,17 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Warehouse"
-        ]
+        }
+      }
+    },
+    "/deliver-order/{id}": {
+      "post": {
+        "description": "",
+        "responses": {
+          "default": {
+            "description": ""
+          }
+        }
       }
     },
     "/get-req-list": {
@@ -445,10 +368,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Warehouse"
-        ]
+        }
       }
     },
     "/import-stock": {
@@ -458,10 +378,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Warehouse"
-        ]
+        }
       }
     },
     "/create-order": {
@@ -471,10 +388,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Sales"
-        ]
+        }
       }
     },
     "/leads": {
@@ -484,10 +398,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Sales"
-        ]
+        }
       }
     },
     "/orders": {
@@ -497,10 +408,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Sales"
-        ]
+        }
       }
     },
     "/": {
@@ -510,10 +418,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Plans"
-        ]
+        }
       },
       "get": {
         "description": "",
@@ -521,10 +426,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Plans"
-        ]
+        }
       }
     },
     "/make-payment": {
@@ -534,10 +436,17 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Payments"
-        ]
+        }
+      }
+    },
+    "/confirm-payment": {
+      "post": {
+        "description": "",
+        "responses": {
+          "default": {
+            "description": ""
+          }
+        }
       }
     },
     "/create-member": {
@@ -547,10 +456,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Company"
-        ]
+        }
       }
     },
     "/add-member": {
@@ -560,10 +466,37 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Company"
-        ]
+        }
+      }
+    },
+    "/members": {
+      "get": {
+        "description": "",
+        "responses": {
+          "default": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/wallet": {
+      "get": {
+        "description": "",
+        "responses": {
+          "default": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/wallet/credit": {
+      "post": {
+        "description": "",
+        "responses": {
+          "default": {
+            "description": ""
+          }
+        }
       }
     },
     "/subscription": {
@@ -573,10 +506,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Company"
-        ]
+        }
       },
       "post": {
         "description": "",
@@ -584,10 +514,7 @@
           "default": {
             "description": ""
           }
-        },
-        "tags": [
-          "Company"
-        ]
+        }
       }
     }
   },

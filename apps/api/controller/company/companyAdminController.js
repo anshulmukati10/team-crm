@@ -112,3 +112,25 @@ export const getCompanyOrders = asyncHandler(async (req, res) => {
   return res.status(200).json(orders);
 });
 
+
+export const getRecordings = asyncHandler(async (req, res) => {
+  try {
+    const id = req.company.id
+    const recordings = await prisma.recordings.findMany({
+      where: {
+        companyId: id
+      },
+      orderBy: { date: "desc" },
+      select:
+      {
+        id: true,
+        url: true,
+        date: true
+      }
+    })
+   return res.json(recordings)
+  } catch (error) {
+    console.log(error)
+    return res.status(500).json({ message: "server error in getting recording" })
+  }
+})

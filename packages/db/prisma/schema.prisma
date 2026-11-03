@@ -79,6 +79,7 @@ model Company {
     plan Plan @relation(fields : [planId] , references : [id])
     subscription Subscription[]
     payment Payment[]
+    recordings Recordings[]
 }
 
 model Lead {
@@ -236,4 +237,12 @@ model Subscription{
     
     @@index([companyId , planId ])
 
+}
+
+model Recordings {
+    id String @id @default(uuid())
+    companyId String 
+    date  DateTime @default(now())
+    url String
+    company Company @relation(fields : [companyId] , references : [id])
 }

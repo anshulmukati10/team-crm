@@ -73,8 +73,12 @@ const operationTags = {
     '/orders': 'Sales',
     '/': 'Plans',
     '/make-payment': 'Payments',
+    '/confirm-payment': 'Payments',
     '/create-member': 'Company',
     '/add-member': 'Company',
+    '/members': 'Company',
+    '/wallet': 'Company',
+    '/wallet/credit': 'Company',
     '/subscription': 'Company'
 }
 

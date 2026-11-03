@@ -51,8 +51,32 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .company-dashboard-orders,
+  .company-dashboard-recordings,
   .company-team-directory {
     margin-top: 16px;
+  }
+  .company-recording-list {
+    display: grid;
+  }
+  .company-recording-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 13px 0;
+    border-top: 1px solid #f0f2f5;
+  }
+  .company-recording-item > div {
+    display: grid;
+    gap: 4px;
+  }
+  .company-recording-item strong {
+    color: #344156;
+    font-size: 12px;
+  }
+  .company-recording-item span {
+    color: #7c8798;
+    font-size: 11px;
   }
   .company-wallet-balance {
     padding: 21px;

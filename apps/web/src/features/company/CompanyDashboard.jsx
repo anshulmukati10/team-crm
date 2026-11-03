@@ -14,6 +14,7 @@ import {
   getCompanyMembers,
   getCompanyOrders,
   getCompanyPlans,
+  getCompanyRecordings,
   getCompanySubscriptions,
   getCompanyWallet,
 } from "./companyApi";
@@ -51,12 +52,13 @@ export default function CompanyDashboard() {
   const loadCompanyData = useCallback(async () => {
     setState({ status: "loading" });
     try {
-      const [plans, subscriptions, members, wallet, orders] = await Promise.all([
+      const [plans, subscriptions, members, wallet, orders, recordings] = await Promise.all([
         getCompanyPlans(),
         getCompanySubscriptions(),
         getCompanyMembers(),
         getCompanyWallet(),
         getCompanyOrders(),
+        getCompanyRecordings(),
       ]);
       setState({
         status: "success",
@@ -64,6 +66,7 @@ export default function CompanyDashboard() {
         members,
         wallet,
         orders,
+        recordings,
         subscription: getLatestSubscription(
           subscriptions,
         ),
@@ -223,6 +226,43 @@ export default function CompanyDashboard() {
                 Review plans & billing <Icon name="chevron" size={14} />
               </Link>
             </article>
+          </section>
+          <section className="panel table-panel company-dashboard-recordings">
+            <div className="table-toolbar">
+              <div>
+                <h2>Meeting recordings</h2>
+                <p>Recordings uploaded by your company team.</p>
+              </div>
+              <span className="text-button">
+                {state.recordings.length} total
+              </span>
+            </div>
+            {state.recordings.length ? (
+              <div className="company-recording-list">
+                {state.recordings.slice(0, 5).map((recording) => (
+                  <article className="company-recording-item" key={recording.id}>
+                    <div>
+                      <strong>Meeting recording</strong>
+                      <span>
+                        {recording.date ? formatDate(recording.date) : "Date unavailable"}
+                      </span>
+                    </div>
+                    <a
+                      className="button button-secondary"
+                      href={recording.url}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      <Icon name="arrow" size={15} /> Watch
+                    </a>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                No meeting recordings have been uploaded by your team.
+              </div>
+            )}
           </section>
           <section className="panel table-panel company-dashboard-orders">
             <div className="table-toolbar">
