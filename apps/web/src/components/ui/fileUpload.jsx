@@ -32,7 +32,22 @@ export default function FileUploadButton() {
         throw new Error(message);
       }
 
-      setStatus({ type: "success", message: "File uploaded successfully." });
+      const uploadedUrl = result.secure_url || result.url;
+      let fileUrl;
+      try {
+        fileUrl = new URL(uploadedUrl);
+      } catch {
+        throw new Error("The upload succeeded but did not return a valid file URL.");
+      }
+      if (fileUrl.protocol !== "https:") {
+        throw new Error("The upload returned an insecure file URL.");
+      }
+
+      setStatus({
+        type: "success",
+        message: `${file.name} uploaded successfully.`,
+        fileUrl: fileUrl.href,
+      });
       setFile(null);
       if (inputRef.current) inputRef.current.value = "";
     } catch (error) {
@@ -101,6 +116,16 @@ export default function FileUploadButton() {
         >
           {status.type === "success" && <FiCheck aria-hidden="true" size={13} />}
           {status.message}
+          {status.fileUrl && (
+            <a
+              className="chat-file-view"
+              href={status.fileUrl}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              View file
+            </a>
+          )}
         </span>
       )}
     </div>

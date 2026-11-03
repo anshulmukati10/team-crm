@@ -268,7 +268,7 @@ export default function ChatWindow({ canManage = false }) {
       (entries) => {
         const visibleIds = entries
           .filter((entry) => entry.isIntersecting && entry.intersectionRatio >= 0.6)
-          .map((entry) => entry.target.dataset.messageId)
+          .map((entry) => entry.target.dataset.chatMessageId)
           .filter(Boolean);
 
         if (!visibleIds.length) return;

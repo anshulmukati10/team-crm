@@ -531,6 +531,21 @@ textarea:focus-visible {
   @apply [font-weight:500];
   @apply [transition:color_0.15s,_background_0.15s];
 }
+.nav-chat-icon {
+  @apply [position:relative];
+  @apply [display:inline-flex];
+  @apply [flex:none];
+}
+.chat-unread-dot {
+  @apply [position:absolute];
+  @apply [top:-2px];
+  @apply [right:-3px];
+  @apply [width:8px];
+  @apply [height:8px];
+  @apply [border:1.5px_solid_white];
+  @apply [border-radius:50%];
+  @apply [background:#2563eb];
+}
 .nav-link:hover {
   @apply [color:var(--primary)];
   @apply [background:#f6f7ff];
@@ -1822,6 +1837,13 @@ td strong {
   @apply [align-items:center];
   @apply [gap:5px];
   @apply [color:#34865f];
+}
+.chat-file-view {
+  @apply [flex:none];
+  @apply [color:#4e60d4];
+  @apply [font-weight:600];
+  @apply [text-decoration:underline];
+  @apply [text-underline-offset:2px];
 }
 .chat-file-status-error {
   @apply [color:#b54747];

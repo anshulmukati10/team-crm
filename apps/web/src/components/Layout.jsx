@@ -1,10 +1,14 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Navigate, NavLink, Outlet, useLocation } from "react-router";
+import { io } from "socket.io-client";
 import { ROLE_LABELS, ROLES, useAuth } from "../context/WorkspaceContext";
 import { initials } from "./ui/Navbar";
 import Footer from "./ui/Footer";
 import Navbar, { Icon } from "./ui/Navbar";
 import teamcrmMark from "../assets/teamcrm-mark.svg";
+import { getRooms } from "../features/chat/chatApi";
+
+const API_BASE = import.meta.env.VITE_API_URL?.replace(/\/+$/, "");
 
 const navigation = [
   {
@@ -81,11 +85,63 @@ const pageTitles = {
 export default function Layout() {
   const { role, requests, user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [hasUnreadChatMessages, setHasUnreadChatMessages] = useState(false);
   const location = useLocation();
+  const pathnameRef = useRef(location.pathname);
   const title = pageTitles[location.pathname] ?? "Workspace";
   const pendingCount = requests.filter(
     (request) => request.status === "Pending",
   ).length;
+
+  useEffect(() => {
+    pathnameRef.current = location.pathname;
+    if (location.pathname === "/chat") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setHasUnreadChatMessages(false);
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!user.id || !API_BASE) return undefined;
+
+    let active = true;
+    let roomIds = [];
+    const socket = io(API_BASE, { withCredentials: true });
+    const joinRooms = () => {
+      roomIds.forEach((roomId) => socket.emit("join_room", roomId));
+    };
+
+    socket.on("connect", joinRooms);
+    socket.on("receive_message", (message) => {
+      if (
+        Number(message?.userId) !== Number(user.id) &&
+        pathnameRef.current !== "/chat"
+      ) {
+        setHasUnreadChatMessages(true);
+      }
+    });
+
+    getRooms()
+      .then((result) => {
+        if (!Array.isArray(result?.rooms)) {
+          throw new Error("The API returned invalid group data.");
+        }
+        if (!active) return;
+
+        roomIds = result.rooms.map((room) => room.id);
+        if (socket.connected) joinRooms();
+      })
+      .catch((error) => {
+        if (active) {
+          console.error("Unable to subscribe to chat notifications:", error);
+        }
+      });
+
+    return () => {
+      active = false;
+      socket.disconnect();
+    };
+  }, [user.id]);
 
   if (!user.loggedIn) return <Navigate replace to="/signin" />;
 
@@ -129,7 +185,16 @@ export default function Layout() {
                       `nav-link ${isActive ? "nav-link-active" : ""}`
                     }
                   >
-                    <Icon name={item.icon} size={19} />
+                    <span className="nav-chat-icon">
+                      <Icon name={item.icon} size={19} />
+                      {item.to === "/chat" &&
+                        hasUnreadChatMessages && (
+                        <span
+                          aria-label="New messages"
+                          className="chat-unread-dot"
+                        />
+                      )}
+                    </span>
                     <span>{item.label}</span>
                     {item.to === "/requests" && pendingCount > 0 && (
                       <span className="nav-count">{pendingCount}</span>

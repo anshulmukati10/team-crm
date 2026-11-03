@@ -3,7 +3,6 @@ import asyncHandler from "../middleware/asyncMiddleware.js";
 import { emitWorkspaceUpdate } from "../config/socket.js";
 
 
-    /* #swagger.tags = ['Warehouse'] */
 
 export const getStockData = asyncHandler(async (req, res) => {
     const { id } = req.user
@@ -104,11 +103,7 @@ export const exportOrder = asyncHandler(async (req, res) => {
                 userId: order.salesId
             }
         })
-        await prisma.wallet.upsert({
-            where: { balanceOf : order.salesId.memberOf },
-            update: { balance: { increment: order.total } },
-            create: { userId: order.salesId, balance: order.total }
-        })
+       
         emitWorkspaceUpdate()
         
         return res.status(200).json({ message: ` order status ${processedOrder.status}` })
@@ -122,8 +117,7 @@ export const deliverWarehouseOrder = asyncHandler(async (req, res) => {
     try {
         const userId = Number(req.user?.id)
         const user = await prisma.user.findUnique({
-            where: { id: userId },
-            select: { role: true }
+            where: { id: userId }
         })
         if (!user) {
             return res.status(401).json({ message: "User not found" })
@@ -131,11 +125,23 @@ export const deliverWarehouseOrder = asyncHandler(async (req, res) => {
         if (user.role !== 'WAREHOUSE') {
             return res.status(403).json({ message: "Not authorized to update order status" })
         }
-
+        const order = await prisma.order.findUnique({
+            where :{
+                id : req.params.id
+            }
+        })
+        
         const result = await prisma.order.updateMany({
             where: { id: req.params.id, status: 'PROCESS' },
             data: { status: 'DELIVERED' }
         })
+
+        await prisma.wallet.upsert({
+            where: { balanceOf : user.memberOf },
+            update: { balance: { increment: order.total } },
+            create: { balanceOf : user.memberOf , balance: order.total }
+        })
+
         if (result.count === 0) {
             const order = await prisma.order.findUnique({
                 where: { id: req.params.id },
