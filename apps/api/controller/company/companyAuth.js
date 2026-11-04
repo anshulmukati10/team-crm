@@ -274,7 +274,6 @@ export const currentSubscription = asyncHandler(async (req, res) => {
 export const createSubscription = asyncHandler(async (req, res) => {
     const companyId = req.company?.id;
     const { planId } = req.body
-    console.log(companyId, planId)
 
     if (!companyId || !planId) {
         return res.status(400).json({

@@ -2,7 +2,6 @@ const admninMiddleware =  (req , res , next ) =>
 {
     try {
         const role  = req.body?.role || req.user?.role;
-        console.log("role"+ role)
         if ( !role || role !== "ADMIN")
         {
            return res.status(403).json({message : " not auth as admin"})

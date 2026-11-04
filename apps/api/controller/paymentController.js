@@ -261,7 +261,6 @@ export const stripeWebhookHandler = asyncHandler(async (req, res) => {
 
 
     if (!signature) {
-        console.log(signature)
         return res.status(400).send("Missing Stripe signature");
     }
     try {

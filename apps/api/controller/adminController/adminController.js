@@ -8,7 +8,6 @@ import { emitWorkspaceUpdate } from "../../config/socket.js";
 export const createProduct = asyncHandler(async (req, res) => {
     try {
         const { name, price, stock } = req.body;
-        console.log(name);
         const productExist = await prisma.product.findFirst({ where: { name: name } })
         if (productExist) {
             return res.status(400).json({ message: "product already exist " })

@@ -37,7 +37,6 @@ export const getOrderList = asyncHandler(async (req, res) => {
         const { id } = req.user
         const numericId = await parseInt(id);
         const user = await prisma.user.findUnique({ where: { id: numericId } })
-        console.log(user.role)
         if (user.role != 'WAREHOUSE' && user.role != 'ADMIN') {
             return res.status(403).json({ message: " not authorized to access order list " })
         }
@@ -64,7 +63,6 @@ export const exportOrder = asyncHandler(async (req, res) => {
         const { id } = req.user
         const numericId = await parseInt(id);
         const user = await prisma.user.findUnique({ where: { id: numericId } })
-        console.log(user.role)
         if (user.role != 'WAREHOUSE') {
             return res.status(403).json({ message: " not authorized to access order list " })
         }
@@ -166,7 +164,6 @@ export const importReqList = asyncHandler(async (req, res) => {
         const { id } = req.user
         const numericId = await parseInt(id);
         const user = await prisma.user.findUnique({ where: { id: numericId } })
-        console.log(user.role)
         if (user.role != 'WAREHOUSE') {
             return res.status(403).json({ message: " not authorized to import order req list " })
         }

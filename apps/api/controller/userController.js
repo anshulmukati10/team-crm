@@ -110,7 +110,6 @@ export const deleteUser = asyncHandler(async (req, res) => {
             return res.status(404).json({ message: "admin can't be deleted " })
         }
 
-        console.log("id " + numericId)
         await prisma.user.delete({ where: { id: numericId } })
         emitWorkspaceUpdate()
         return res.status(200).json({ message: "user deleted" })
