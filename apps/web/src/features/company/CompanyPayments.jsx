@@ -4,9 +4,11 @@ import {
   Icon,
   PageHeading,
   StatusBadge,
+  DataTable,
 } from "../../components/ui/Navbar";
 import {
   createCompanyStripeOnboarding,
+  getCompanyPayoutHistory,
   getCompanyStripeStatus,
 } from "./companyApi";
 
@@ -34,6 +36,7 @@ function SetupStep({ complete, title, description }) {
 export default function CompanyPayments() {
   const location = useLocation();
   const [state, setState] = useState({ status: "loading" });
+  const [history, setHistory] = useState({ status: "loading", payouts: [] });
   const [isStartingSetup, setIsStartingSetup] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -54,6 +57,20 @@ export default function CompanyPayments() {
     }
   }, []);
 
+  const loadPayoutHistory = useCallback(async (page = 1) => {
+    setHistory((current) => ({ ...current, status: "loading", error: "" }));
+    try {
+      const result = await getCompanyPayoutHistory(page);
+      setHistory({ status: "success", ...result });
+    } catch (loadError) {
+      setHistory((current) => ({
+        ...current,
+        status: "error",
+        error: loadError.message,
+      }));
+    }
+  }, []);
+
   useEffect(() => {
     let active = true;
     Promise.resolve()
@@ -66,6 +83,7 @@ export default function CompanyPayments() {
           );
         }
       });
+    loadPayoutHistory();
 
     if (location.pathname.endsWith("/refresh")) {
       refreshLinkPromise.current ??= Promise.resolve().then(
@@ -91,7 +109,7 @@ export default function CompanyPayments() {
     return () => {
       active = false;
     };
-  }, [loadStatus, location.pathname]);
+  }, [loadPayoutHistory, loadStatus, location.pathname]);
 
   async function handleStartSetup() {
     setIsStartingSetup(true);
@@ -113,6 +131,21 @@ export default function CompanyPayments() {
   const account = state.status === "success" ? state.account : null;
   const isReady = Boolean(account?.canReceivePayments);
   const needsSetup = !isReady;
+  const payoutRows = history.payouts.map((payout) => ({
+    id: payout.id,
+    cells: [
+      new Date(payout.createdAt).toLocaleString(),
+      new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: String(payout.currency || "USD").toUpperCase(),
+      }).format(Number(payout.amount)),
+      <StatusBadge key={`${payout.id}-status`} status={payout.status} />,
+      payout.description || "—",
+      payout.arrival_date
+        ? new Date(payout.arrival_date).toLocaleDateString()
+        : "—",
+    ],
+  }));
 
   return (
     <>
@@ -124,7 +157,10 @@ export default function CompanyPayments() {
           <button
             className="button button-secondary"
             disabled={state.status === "loading"}
-            onClick={loadStatus}
+            onClick={() => {
+              loadStatus();
+              loadPayoutHistory(history.page || 1);
+            }}
             type="button"
           >
             <Icon name="clock" size={16} /> Refresh
@@ -260,6 +296,59 @@ export default function CompanyPayments() {
           </section>
         </div>
       )}
+      <section className="panel company-stripe-checklist">
+        <div id="payout-history">
+          <p className="eyebrow">Stripe Connect</p>
+          <h2>Payout history</h2>
+        </div>
+        {history.status === "loading" ? (
+          <div className="empty-state" role="status">
+            Loading payout history…
+          </div>
+        ) : history.status === "error" ? (
+          <div className="empty-state" role="alert">
+            <p>{history.error}</p>
+            <button
+              className="button button-secondary"
+              onClick={() => loadPayoutHistory(history.page || 1)}
+              type="button"
+            >
+              Try again
+            </button>
+          </div>
+        ) : (
+          <>
+            <DataTable
+              columns={["Date", "Amount", "Status", "Description", "Arrival"]}
+              emptyMessage="No payouts have been recorded yet."
+              rows={payoutRows}
+            />
+            {history.totalPages > 1 && (
+              <div className="company-payout-pagination">
+                <button
+                  className="button button-secondary"
+                  disabled={history.page <= 1}
+                  onClick={() => loadPayoutHistory(history.page - 1)}
+                  type="button"
+                >
+                  Previous
+                </button>
+                <span>
+                  Page {history.page} of {history.totalPages}
+                </span>
+                <button
+                  className="button button-secondary"
+                  disabled={history.page >= history.totalPages}
+                  onClick={() => loadPayoutHistory(history.page + 1)}
+                  type="button"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </section>
     </>
   );
 }

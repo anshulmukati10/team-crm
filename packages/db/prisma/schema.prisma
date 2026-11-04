@@ -58,6 +58,7 @@ enum subscriptionStatus{
 }
 
 enum payoutStatus{
+    PENDING
     FAIL 
     PROCESS
     ARRIVED
@@ -66,6 +67,7 @@ enum payoutStatus{
 enum PaymentMethod{
     DEBITCARD
     BANKTRANSFER
+    STRIPE
 }
 
 model User {
@@ -293,25 +295,44 @@ model Recordings {
     company Company @relation(fields : [companyId] , references : [id])
 }
 
-model Payout{
-    id String @id @default(uuid())
-    curreny String @default("usd")
-    description String?
-    metadata Json   @default("{}") 
-    amount Decimal @default(999)
-    status payoutStatus
-    fee Decimal  @default(0.0050)
-    createdAt DateTime @default(now())
-    arrival_date DateTime 
-    destination String 
-    paymentMethod PaymentMethod
-    reversed_by String 
-    reversed_date DateTime?   
-    paidBy String 
-    company Company @relation(fields : [paidBy] , references : [id])
-    paymentId String @unique
-    payment Payment @relation(fields : [paymentId] , references : [id])
+model Payout {
+  id              String        @id @default(uuid())
 
+  currency        String        @default("usd")
+  description     String?
+  metadata        Json          @default("{}")
+
+  amount          Decimal       @default(0)
+  fee             Decimal       @default(0)
+
+  status          payoutStatus  @default(PROCESS)
+
+  createdAt       DateTime      @default(now())
+  arrival_date    DateTime?
+
+  destination     String?
+
+  paymentMethod   PaymentMethod
+
+  reversed_by     String?
+  reversed_date   DateTime?
+
+  paidBy          String
+  company         Company       @relation(fields: [paidBy], references: [id])
+
+ 
+  paymentId       String?       @unique
+  payment         Payment?      @relation(fields: [paymentId], references: [id])
+
+
+  stripePayoutId  String?       @unique
+  stripeAccountId String
+
+  updatedAt       DateTime      @updatedAt
+
+  @@index([paidBy])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model StripeConnectedAccount{

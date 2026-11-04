@@ -70,7 +70,10 @@ const operationTags = {
     '/import-stock': 'Warehouse',
     '/create-order': 'Sales',
     '/leads': 'Sales',
+    '/lead': 'Sales',
     '/orders': 'Sales',
+    '/orders/{id}/payment': 'Payments',
+    '/orders/{id}/confirm-payment': 'Payments',
     '/': 'Plans',
     '/make-payment': 'Payments',
     '/confirm-payment': 'Payments',
@@ -79,7 +82,13 @@ const operationTags = {
     '/members': 'Company',
     '/wallet': 'Company',
     '/wallet/credit': 'Company',
-    '/subscription': 'Company'
+    '/subscription': 'Company',
+    '/get-recordings': 'Company',
+    '/stripe/balance': 'Company',
+    '/stripe/onboarding': 'Company',
+    '/stripe/status': 'Company',
+    '/stripe/payout-history': 'Payments',
+    '/stripe/payout': 'Payments'
 }
 
 const doc = {

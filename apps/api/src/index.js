@@ -21,7 +21,7 @@ import { forwardToApp  } from "../config/ngrok.js";
 import '../jobs/expireSubscriptionHandler.js'
 import "../config/worker.js"
 import { stripeWebhookHandler  } from "../controller/paymentController.js";
-
+import { startPayoutScheduler } from "../jobs/payoutScheduler.js";
 
 const app = express();
 
@@ -58,6 +58,7 @@ if (fs.existsSync(swaggerSpecPath)) {
     app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, uiOptions))
     console.log(` swagger is live on  localhost:${PORT}/api-docs`)
 }
+startPayoutScheduler();
 app.use('/auth', userRoutes)
 app.use('/admin', adminRoutes)
 app.use('/warehouse', wareHouseRoutes)

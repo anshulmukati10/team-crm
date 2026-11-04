@@ -283,6 +283,50 @@ export const stripeWebhookHandler = asyncHandler(async (req, res) => {
     try {
         const intent = event.data.object;
         if (event.account) {
+            if (event.type.startsWith("payout.")) {
+                const payoutStatus = {
+                    pending: "PENDING",
+                    in_transit: "PROCESS",
+                    paid: "ARRIVED",
+                    failed: "FAIL",
+                    canceled: "FAIL",
+                }[intent.status];
+
+                if (!payoutStatus) {
+                    return res.sendStatus(200);
+                }
+
+                const payoutWhere = {
+                    stripeAccountId: event.account,
+                    OR: [{ stripePayoutId: intent.id }],
+                };
+                if (intent.metadata?.internalPayoutId) {
+                    payoutWhere.OR.push({ id: intent.metadata.internalPayoutId });
+                }
+
+                const updated = await prisma.payout.updateMany({
+                    where: payoutWhere,
+                    data: {
+                        stripePayoutId: intent.id,
+                        status: payoutStatus,
+                        destination:
+                            typeof intent.destination === "string"
+                                ? intent.destination
+                                : intent.destination?.id || null,
+                        arrival_date: intent.arrival_date
+                            ? new Date(intent.arrival_date * 1000)
+                            : null,
+                    },
+                });
+
+                if (!updated.count) {
+                    console.warn(
+                        `No internal payout matched Stripe payout ${intent.id}`
+                    );
+                }
+                return res.sendStatus(200);
+            }
+
             if (
                 intent.metadata?.purpose === "order_payment" &&
                 ["payment_intent.succeeded", "payment_intent.payment_failed"].includes(event.type)

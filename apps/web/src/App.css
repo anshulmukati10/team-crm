@@ -93,6 +93,55 @@
     font-size: 11px;
     line-height: 1.55;
   }
+  .company-stripe-payout {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    margin-top: 16px;
+    padding: 21px;
+  }
+  .company-stripe-payout h2 {
+    margin: 0;
+    color: #273447;
+    font: 700 17px/1.35 Manrope, sans-serif;
+  }
+  .company-stripe-payout > div:first-child > p:last-child {
+    max-width: 520px;
+    margin: 8px 0 0;
+    color: #7c8798;
+    font-size: 11px;
+    line-height: 1.6;
+  }
+  .company-stripe-payout-action {
+    display: grid;
+    flex-shrink: 0;
+    justify-items: start;
+    gap: 9px;
+  }
+  .company-payout-unavailable,
+  .company-payout-error,
+  .company-payout-success {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .company-payout-unavailable,
+  .company-payout-error {
+    color: #a45b52;
+  }
+  .company-payout-success {
+    color: #33865f;
+  }
+  .company-payout-history-link {
+    color: #586be0;
+    font-size: 11px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .company-payout-history-link:hover {
+    text-decoration: underline;
+  }
   .company-welcome-panel,
   .company-subscription-panel {
     padding: 21px;
@@ -396,9 +445,18 @@
     font-size: 11px;
     font-weight: 600;
   }
-  .company-stripe-checklist > div {
+  .company-stripe-checklist > div:first-child {
     padding-bottom: 15px;
     border-bottom: 1px solid #f0f2f5;
+  }
+  .company-payout-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 16px;
+    color: #7c8798;
+    font-size: 11px;
   }
   .company-stripe-checklist .eyebrow {
     margin: 0 0 5px;
@@ -449,6 +507,13 @@
   .company-stripe-footnote {
     margin: 0;
     line-height: 1.6;
+  }
+  @media (max-width: 700px) {
+    .company-stripe-payout {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 16px;
+    }
   }
   @media (max-width: 900px) {
     .company-dashboard-grid {

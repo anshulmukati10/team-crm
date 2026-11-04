@@ -19,6 +19,11 @@ import {
     getRecordings
 } from "../../controller/company/companyAdminController.js";
 
+import {
+    getCompanyPayoutHistory,
+    requestCompanyPayout,
+} from "../../controller/payoutController.js";
+
 
 
 import companyAuthMiddleware from '../../middleware/companyAuthMiddleware.js'
@@ -42,6 +47,7 @@ router.post('/subscription' , companyAuthMiddleware , company , createSubscripti
 router.get('/get-recordings' ,  companyAuthMiddleware , company , getRecordings)
 router.post("/stripe/onboarding",companyAuthMiddleware,company, retryStripeOnboarding);
 router.get("/stripe/status",companyAuthMiddleware,company,getStripeAccountStatus);
-
+router.get("/stripe/payout-history", companyAuthMiddleware, company, getCompanyPayoutHistory);
+router.post("/stripe/payout", companyAuthMiddleware, company, requestCompanyPayout);
 
 export default router ;

@@ -208,6 +208,39 @@ export async function getCompanyStripeStatus() {
   }
 }
 
+export async function getCompanyPayoutHistory(page = 1) {
+  try {
+    const response = await axios.get(
+      `${getApiBase()}/company/stripe/payout-history`,
+      { params: { page, pageSize: 20 } },
+    );
+    if (
+      !Array.isArray(response.data?.payouts) ||
+      !Number.isInteger(response.data?.totalPages)
+    ) {
+      throw new Error("The payout history service returned an invalid response.");
+    }
+    return response.data;
+  } catch (error) {
+    throw getError(error, "Unable to load payout history.");
+  }
+}
+
+export async function requestCompanyPayout() {
+  try {
+    const response = await axios.post(`${getApiBase()}/company/stripe/payout`);
+    if (
+      typeof response.data?.success !== "boolean" ||
+      (response.data.success && !response.data.payout)
+    ) {
+      throw new Error("The payout service returned an invalid response.");
+    }
+    return response.data;
+  } catch (error) {
+    throw getError(error, "Unable to request a payout.");
+  }
+}
+
 export async function createCompanyStripeOnboarding() {
   try {
     const response = await axios.post(
