@@ -1,6 +1,7 @@
 import asyncHandler from "../middleware/asyncMiddleware.js"
 import stripe from '../config/stripe.js'
 import { prisma } from '../config/prismaClient.js'
+import { settleOrderPaymentIntent } from './saleController.js'
 
 async function activatePaidSubscription(intent, expectedCompanyId) {
     const { paymentId, companyId, planId } = intent.metadata ?? {};
@@ -281,6 +282,21 @@ export const stripeWebhookHandler = asyncHandler(async (req, res) => {
     }
     try {
         const intent = event.data.object;
+        if (event.account) {
+            if (
+                intent.metadata?.purpose === "order_payment" &&
+                ["payment_intent.succeeded", "payment_intent.payment_failed"].includes(event.type)
+            ) {
+                const result = await settleOrderPaymentIntent(intent, event.account)
+                return res.status(200).json({
+                    message: result.alreadyProcessed
+                        ? "Order payment was already processed"
+                        : "Order payment updated"
+                })
+            }
+            return res.sendStatus(200)
+        }
+
         if (event.type === 'payment_intent.succeeded') {
             const result = await activatePaidSubscription(intent);
 

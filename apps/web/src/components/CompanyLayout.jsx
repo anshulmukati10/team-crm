@@ -9,7 +9,8 @@ const companyNavigation = [
   { to: "/company", label: "Overview", icon: "grid", end: true },
   { to: "/company/team", label: "Team members", icon: "users" },
   { to: "/company/orders", label: "Orders", icon: "box" },
-  { to: "/company/wallet", label: "Wallet", icon: "chart" },
+  { to: "/company/wallet", label: "Stripe balance", icon: "chart" },
+  { to: "/company/payments", label: "Payments", icon: "chart" },
   { to: "/company/subscription", label: "Plans & billing", icon: "chart" },
 ];
 
@@ -18,7 +19,10 @@ const companyTitles = {
   "/company/dashboard": "Company overview",
   "/company/team": "Team members",
   "/company/orders": "Company orders",
-  "/company/wallet": "Company wallet",
+  "/company/wallet": "Stripe balance",
+  "/company/payments": "Payments",
+  "/company/stripe/return": "Payments",
+  "/company/stripe/refresh": "Payments",
   "/company/subscription": "Plans & billing",
 };
 

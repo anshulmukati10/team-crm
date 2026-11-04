@@ -39,6 +39,12 @@ enum paymentStatus {
     FAIL
 }
 
+enum orderPaymentStatus {
+    PENDING
+    SUCCESS
+    FAIL
+}
+
 enum planType{
     FREE
     PRO
@@ -49,6 +55,17 @@ enum subscriptionStatus{
     CANCEL
     EXPIRE
     INACTIVE
+}
+
+enum payoutStatus{
+    FAIL 
+    PROCESS
+    ARRIVED
+}
+
+enum PaymentMethod{
+    DEBITCARD
+    BANKTRANSFER
 }
 
 model User {
@@ -80,6 +97,14 @@ model Company {
     subscription Subscription[]
     payment Payment[]
     recordings Recordings[]
+    payout Payout[]
+    stripeAccount StripeConnectedAccount?
+  
+    stripeAccountId String? @unique
+    stripeChargesEnabled Boolean @default(false)
+    stripePayoutsEnabled Boolean @default(false)
+    stripeDetailsSubmitted Boolean @default(false)
+    orderPayments OrderPayment[]
 }
 
 model Lead {
@@ -112,6 +137,7 @@ model Order {
     leadId String
     lead Lead @relation(fields : [leadId] , references : [id])
     orderItems OrderItem[]
+    payment OrderPayment?
     orderOf String 
     company Company @relation(fields : [orderOf]  , references : [id])
 }
@@ -193,8 +219,28 @@ model Payment {
     planId          String?
     company         Company?      @relation(fields: [companyId], references: [id])
     plan            Plan?         @relation(fields: [planId], references: [id])
+    
+    payout Payout?
    
     @@index([companyId , planId , createdAt])
+}
+
+model OrderPayment {
+    id String @id @default(cuid())
+    orderId String @unique
+    companyId String
+    stripeAccountId String
+    amount Int
+    currency String @default("usd")
+    status orderPaymentStatus @default(PENDING)
+    stripePaymentIntentId String? @unique
+    idempotencyKey String @unique
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+    company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+    @@index([companyId, status, createdAt])
 }
 
 model Plan{
@@ -245,4 +291,45 @@ model Recordings {
     date  DateTime @default(now())
     url String
     company Company @relation(fields : [companyId] , references : [id])
+}
+
+model Payout{
+    id String @id @default(uuid())
+    curreny String @default("usd")
+    description String?
+    metadata Json   @default("{}") 
+    amount Decimal @default(999)
+    status payoutStatus
+    fee Decimal  @default(0.0050)
+    createdAt DateTime @default(now())
+    arrival_date DateTime 
+    destination String 
+    paymentMethod PaymentMethod
+    reversed_by String 
+    reversed_date DateTime?   
+    paidBy String 
+    company Company @relation(fields : [paidBy] , references : [id])
+    paymentId String @unique
+    payment Payment @relation(fields : [paymentId] , references : [id])
+
+}
+
+model StripeConnectedAccount{
+    id String  @id @default(uuid())
+    companyId String @unique
+    stripeAccountId String @unique
+    accountType String @default("EXPRESS")
+    country String @default("US")
+    currency String @default("usd")
+    status String @default("PENDING")
+    chargesEnabled  Boolean @default(false)
+    payoutEnabled  Boolean @default(false)
+    detailsSubmitted  Boolean @default(false)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt 
+    
+    company Company @relation(fields : [companyId] , references : [id] , onDelete: Cascade )
+    
+    @@index([status])
+
 }

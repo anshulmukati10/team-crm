@@ -7,15 +7,36 @@ const API_BASE = import.meta.env.VITE_API_URL;
 const baseUrl = `${API_BASE}/sales`;
 
 
-export const createSalesOrder = async (order) => {
+export const createSalesOrder = async (order, idempotencyKey) => {
     try {
         const response = await axios.post(
             `${baseUrl}/create-order`,
-            order
+            order,
+            { headers: { "Idempotency-Key": idempotencyKey } }
         );
         return response?.data;
     } catch (error) {
         throw error?.response?.data?.message || "Unable to create this order.";
+    }
+};
+
+export const getOrderPaymentIntent = async (orderId) => {
+    try {
+        const response = await axios.post(`${baseUrl}/orders/${orderId}/payment`);
+        return response?.data;
+    } catch (error) {
+        throw error?.response?.data?.message || "Unable to load order payment.";
+    }
+};
+
+export const confirmOrderPayment = async (orderId) => {
+    try {
+        const response = await axios.post(
+            `${baseUrl}/orders/${orderId}/confirm-payment`,
+        );
+        return response?.data;
+    } catch (error) {
+        throw error?.response?.data?.message || "Unable to confirm order payment.";
     }
 };
 

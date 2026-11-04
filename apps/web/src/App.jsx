@@ -6,6 +6,7 @@ import CompanyAuth from "./features/company/CompanyAuth";
 import CompanyBilling from "./features/company/CompanyBilling";
 import CompanyDashboard from "./features/company/CompanyDashboard";
 import CompanyOrders from "./features/company/CompanyOrders";
+import CompanyPayments from "./features/company/CompanyPayments";
 import CompanyTeam from "./features/company/CompanyTeam";
 import CompanyWallet from "./features/company/CompanyWallet";
 import ManageRequests from "./features/admin/manageRequest";
@@ -100,6 +101,9 @@ export default function App() {
         <Route path="team" element={<CompanyTeam />} />
         <Route path="orders" element={<CompanyOrders />} />
         <Route path="wallet" element={<CompanyWallet />} />
+        <Route path="payments" element={<CompanyPayments />} />
+        <Route path="stripe/return" element={<CompanyPayments />} />
+        <Route path="stripe/refresh" element={<CompanyPayments />} />
         <Route path="subscription" element={<CompanyBilling />} />
       </Route>
       <Route path="/signin" element={<Auth mode="signin" />} />

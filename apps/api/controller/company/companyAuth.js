@@ -2,6 +2,10 @@ import genCompanyToken from '../../config/genCompanyToken.js';
 import asyncHandler from '../../middleware/asyncMiddleware.js'
 import { prisma } from '../../config/prismaClient.js';
 import bcrypt from 'bcrypt'
+import {
+    createConnectedAccount,
+    retrieveConnectedAccountStatus,
+} from "../../services/stripeConnectService.js";
 
 
 
@@ -51,13 +55,35 @@ export const createCompany = asyncHandler(async (req, res) => {
 
             return createdCompany;
         });
-        return res.status(201).json({ message: ` company registered  ${company.id}` })
+        try {
+            const result = await createConnectedAccount(company);
+
+            return res.status(201).json({
+                message: "Company registered. Complete Stripe onboarding.",
+                companyId: company.id,
+                stripeOnboardingUrl: result.onboardingUrl,
+                stripeStatus: result.connectedAccount.status,
+            });
+
+        } catch (stripeError) {
+            console.error(
+                "Stripe Connect registration error:",
+                stripeError
+            );
+
+
+            return res.status(201).json({
+                message: "Company registered. Stripe onboarding needs retry.",
+                companyId: company.id,
+                stripeOnboardingRequired: true,
+            });
+        }
     }
     catch (err) {
-        console.log(err)
-        return res.status(500).json({ error: err.message })
-    }
-})
+            console.log(err)
+            return res.status(500).json({ error: err.message })
+        }
+    })
 
 
 export const loginCompany = asyncHandler(async (req, res) => {
@@ -338,5 +364,114 @@ export const createSubscription = asyncHandler(async (req, res) => {
     return res.status(201).json({
         message: "Subscription created successfully",
         subscription,
+    });
+});
+
+
+export const retryStripeOnboarding = asyncHandler(async (req, res) => {
+    try {
+        const companyId = req.company?.id;
+
+        if (!companyId) {
+            return res.status(401).json({
+                message: "Company authentication required",
+            });
+        }
+
+        const company = await prisma.company.findUnique({
+            where: { id: companyId },
+        });
+
+        if (!company) {
+            return res.status(404).json({
+                message: "Company not found",
+            });
+        }
+
+        const result = await createConnectedAccount(company);
+
+        return res.status(200).json({
+            message: "Stripe onboarding link generated",
+            onboardingUrl: result.onboardingUrl,
+        });
+
+    } catch (error) {
+        console.error("Stripe onboarding error:", error);
+
+        return res.status(500).json({
+            message: "Unable to generate Stripe onboarding link",
+        });
+    }
+});
+
+
+export const getStripeAccountStatus = asyncHandler(async (req, res) => {
+    const companyId = req.company?.id;
+
+    if (!companyId) {
+        return res.status(401).json({
+            message: "Company authentication required",
+        });
+    }
+
+    const connectedAccount = await prisma.stripeConnectedAccount.findUnique({
+        where: { companyId },
+        select: {
+            stripeAccountId: true,
+            accountType: true,
+            country: true,
+            currency: true,
+            status: true,
+            chargesEnabled: true,
+            payoutEnabled: true,
+            detailsSubmitted: true,
+        },
+    });
+
+    if (!connectedAccount) {
+        return res.status(404).json({
+            message: "Stripe account not created",
+            connected: false,
+        });
+    }
+
+    const accountStatus = await retrieveConnectedAccountStatus(connectedAccount);
+    const updatedAccount = await prisma.stripeConnectedAccount.update({
+        where: { companyId },
+        data: {
+            status:
+                accountStatus.chargesEnabled &&
+                accountStatus.payoutEnabled
+                    ? "ACTIVE"
+                    : "PENDING",
+            chargesEnabled: accountStatus.chargesEnabled,
+            payoutEnabled: accountStatus.payoutEnabled,
+            detailsSubmitted: accountStatus.detailsSubmitted,
+        },
+    });
+
+    await prisma.company.update({
+        where: { id: companyId },
+        data: {
+            stripeAccountId: connectedAccount.stripeAccountId,
+            stripeChargesEnabled: accountStatus.chargesEnabled,
+            stripePayoutsEnabled: accountStatus.payoutEnabled,
+            stripeDetailsSubmitted: accountStatus.detailsSubmitted,
+        },
+    });
+
+    return res.status(200).json({
+        connected: true,
+        account: {
+            country: accountStatus.country || connectedAccount.country,
+            currency: accountStatus.currency || connectedAccount.currency,
+            status: updatedAccount.status,
+            chargesEnabled: updatedAccount.chargesEnabled,
+            payoutsEnabled: updatedAccount.payoutEnabled,
+            detailsSubmitted: updatedAccount.detailsSubmitted,
+            canReceivePayments:
+                updatedAccount.chargesEnabled &&
+                updatedAccount.detailsSubmitted,
+        },
     });
 });

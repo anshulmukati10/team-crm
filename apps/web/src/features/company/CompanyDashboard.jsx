@@ -15,8 +15,9 @@ import {
   getCompanyOrders,
   getCompanyPlans,
   getCompanyRecordings,
+  getCompanyStripeBalance,
   getCompanySubscriptions,
-  getCompanyWallet,
+  formatStripeAmounts,
 } from "./companyApi";
 
 function getLatestSubscription(subscriptions) {
@@ -52,11 +53,11 @@ export default function CompanyDashboard() {
   const loadCompanyData = useCallback(async () => {
     setState({ status: "loading" });
     try {
-      const [plans, subscriptions, members, wallet, orders, recordings] = await Promise.all([
+      const [plans, subscriptions, members, stripeBalance, orders, recordings] = await Promise.all([
         getCompanyPlans(),
         getCompanySubscriptions(),
         getCompanyMembers(),
-        getCompanyWallet(),
+        getCompanyStripeBalance(),
         getCompanyOrders(),
         getCompanyRecordings(),
       ]);
@@ -64,7 +65,7 @@ export default function CompanyDashboard() {
         status: "success",
         plans,
         members,
-        wallet,
+        stripeBalance,
         orders,
         recordings,
         subscription: getLatestSubscription(
@@ -144,14 +145,14 @@ export default function CompanyDashboard() {
             />
             <MetricCard
               icon="chart"
-              label="Wallet balance"
-              note={
-                state.wallet.limit == null
-                  ? "No wallet cap configured"
-                  : `Limit: ${formatCurrency(Number(state.wallet.limit))}`
-              }
+              label="Stripe available balance"
+              note={state.stripeBalance.connected ? "Live from Stripe" : "Connect Stripe to view"}
               tone="green"
-              value={formatCurrency(Number(state.wallet.balance))}
+              value={
+                state.stripeBalance.connected
+                  ? formatStripeAmounts(state.stripeBalance.available)
+                  : "Not connected"
+              }
             />
             <MetricCard
               icon="box"
@@ -193,7 +194,7 @@ export default function CompanyDashboard() {
                   Manage team members
                 </Link>
                 <Link className="button button-secondary" to="/company/wallet">
-                  Add wallet balance
+                  View Stripe balance
                 </Link>
                 <Link
                   className="button button-secondary"

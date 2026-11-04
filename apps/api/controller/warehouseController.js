@@ -44,7 +44,8 @@ export const getOrderList = asyncHandler(async (req, res) => {
             select: {
                 id: true,
                 total: true,
-                status: true
+                status: true,
+                payment: { select: { status: true } }
             }
         })
         res.json(orders)
@@ -67,9 +68,15 @@ export const exportOrder = asyncHandler(async (req, res) => {
             return res.status(403).json({ message: " not authorized to access order list " })
         }
         const orderId = req.params.id
-        const order = await prisma.order.findUnique({ where: { id: orderId }, include: { orderItems: true } })
+        const order = await prisma.order.findUnique({
+            where: { id: orderId },
+            include: { orderItems: true, payment: true }
+        })
         if (!order) {
             return res.status(404).json({ message: "Order not found" })
+        }
+        if (order.payment?.status !== "SUCCESS") {
+            return res.status(409).json({ message: "Order must be paid before it can be processed" })
         }
         if (order.status !== 'PLACED') {
             return res.status(409).json({ message: "Only placed orders can be processed" })
@@ -77,8 +84,8 @@ export const exportOrder = asyncHandler(async (req, res) => {
         const orderItems = order.orderItems;
         for (let item of orderItems) {
             const product = await prisma.product.findUnique({ where: { id: item.productId } })
-            if (item.quantity > product.stock) {
-                return res.status(429).json({ message: `product is not sufficient to shiping ${product.id}` })
+            if (!product || item.quantity > product.stock) {
+                return res.status(409).json({ message: `Insufficient stock for product ${item.productId}` })
             }
         }
         for (let item of orderItems) {
@@ -128,26 +135,16 @@ export const deliverWarehouseOrder = asyncHandler(async (req, res) => {
                 id : req.params.id
             }
         })
+        if (!order) {
+            return res.status(404).json({ message: "Order not found" })
+        }
         
         const result = await prisma.order.updateMany({
             where: { id: req.params.id, status: 'PROCESS' },
             data: { status: 'DELIVERED' }
         })
 
-        await prisma.wallet.upsert({
-            where: { balanceOf : user.memberOf },
-            update: { balance: { increment: order.total } },
-            create: { balanceOf : user.memberOf , balance: order.total }
-        })
-
         if (result.count === 0) {
-            const order = await prisma.order.findUnique({
-                where: { id: req.params.id },
-                select: { id: true }
-            })
-            if (!order) {
-                return res.status(404).json({ message: "Order not found" })
-            }
             return res.status(409).json({ message: "Only processed orders can be marked delivered" })
         }
 

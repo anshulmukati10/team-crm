@@ -138,6 +138,38 @@ export async function getCompanyWallet() {
   }
 }
 
+export async function getCompanyStripeBalance() {
+  try {
+    const response = await axios.get(`${getApiBase()}/company/stripe/balance`);
+    const { connected, available, pending } = response.data || {};
+    if (
+      typeof connected !== "boolean" ||
+      !Array.isArray(available) ||
+      !Array.isArray(pending)
+    ) {
+      throw new Error("The Stripe balance service returned an invalid response.");
+    }
+    return response.data;
+  } catch (error) {
+    throw getError(error, "Unable to load your Stripe balance.");
+  }
+}
+
+export function formatStripeAmounts(amounts) {
+  if (!amounts?.length) return "—";
+  return amounts
+    .map(({ amount, currency }) => {
+      const code = String(currency).toUpperCase();
+      const formatter = new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: code,
+      });
+      const divisor = 10 ** formatter.resolvedOptions().maximumFractionDigits;
+      return formatter.format(Number(amount) / divisor);
+    })
+    .join(" · ");
+}
+
 export async function creditCompanyWallet(balance) {
   try {
     const response = await axios.post(`${getApiBase()}/company/wallet/credit`, {
@@ -158,6 +190,35 @@ export async function getCompanyOrders() {
     return response.data;
   } catch (error) {
     throw getError(error, "Unable to load company orders.");
+  }
+}
+
+export async function getCompanyStripeStatus() {
+  try {
+    const response = await axios.get(`${getApiBase()}/company/stripe/status`);
+    if (typeof response.data?.connected !== "boolean") {
+      throw new Error("The Stripe service returned an invalid account status.");
+    }
+    return response.data;
+  } catch (error) {
+    if (error?.response?.status === 404 && error.response.data?.connected === false) {
+      return { connected: false };
+    }
+    throw getError(error, "Unable to load your Stripe account status.");
+  }
+}
+
+export async function createCompanyStripeOnboarding() {
+  try {
+    const response = await axios.post(
+      `${getApiBase()}/company/stripe/onboarding`,
+    );
+    if (typeof response.data?.onboardingUrl !== "string") {
+      throw new Error("The Stripe service did not return an onboarding link.");
+    }
+    return response.data;
+  } catch (error) {
+    throw getError(error, "Unable to start Stripe account setup.");
   }
 }
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DataTable,
   formatCurrency,
@@ -9,7 +9,9 @@ import {
 } from "../../components/ui/Navbar";
 import { useAuth } from "../../context/WorkspaceContext";
 import {
+  confirmOrderPayment,
   createSalesOrder,
+  getOrderPaymentIntent,
   getSalesLeads,
   getSalesOrders,
 } from "./salesApi";
@@ -21,6 +23,133 @@ import {
 } from "../warehouse/wareHouseApi";
 import useWorkspaceUpdates from "../../context/useWorkspaceUpdates";
 import { getAccountSales } from "../accounts/accountApi";
+
+const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+let stripeScriptPromise;
+
+function loadStripeLibrary() {
+  if (window.Stripe) return Promise.resolve(window.Stripe);
+  if (!stripeScriptPromise) {
+    stripeScriptPromise = new Promise((resolve, reject) => {
+      let script = document.querySelector('script[src="https://js.stripe.com/v3/"]');
+      if (!script) {
+        script = document.createElement("script");
+        script.src = "https://js.stripe.com/v3/";
+        script.async = true;
+        document.head.appendChild(script);
+      }
+      script.addEventListener("load", () => {
+        if (window.Stripe) resolve(window.Stripe);
+        else reject(new Error("Stripe.js loaded but could not be initialized."));
+      }, { once: true });
+      script.addEventListener(
+        "error",
+        () => reject(new Error("Unable to load the secure payment form.")),
+        { once: true },
+      );
+    });
+  }
+  return stripeScriptPromise;
+}
+
+function StripeOrderCardForm({ checkout, email, onComplete, onCancel }) {
+  const cardElementRef = useRef(null);
+  const cardRef = useRef(null);
+  const [stripeState, setStripeState] = useState(null);
+  const [error, setError] = useState("");
+  const [isConfirming, setIsConfirming] = useState(false);
+  const setupError = !stripeKey
+    ? "Online payment is not configured. Set VITE_STRIPE_PUBLISHABLE_KEY in the web app environment."
+    : !checkout?.stripeAccountId || !checkout?.clientSecret
+      ? "The order payment is missing its Stripe account or client secret."
+      : "";
+
+  useEffect(() => {
+    let active = true;
+    if (!stripeKey || !checkout?.stripeAccountId || !checkout?.clientSecret) {
+      return undefined;
+    }
+
+    loadStripeLibrary()
+      .then((Stripe) => {
+        if (!active || !cardElementRef.current) return;
+        const stripe = Stripe(stripeKey, {
+          stripeAccount: checkout.stripeAccountId,
+        });
+        const card = stripe.elements().create("card");
+        card.mount(cardElementRef.current);
+        cardRef.current = card;
+        setStripeState({ stripe, card });
+      })
+      .catch((loadError) => {
+        if (active) setError(loadError.message);
+      });
+
+    return () => {
+      active = false;
+      cardRef.current?.unmount();
+      cardRef.current = null;
+      setStripeState(null);
+    };
+  }, [checkout?.clientSecret, checkout?.stripeAccountId]);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    if (!stripeState) return;
+    setError("");
+    setIsConfirming(true);
+    try {
+      const result = await stripeState.stripe.confirmCardPayment(
+        checkout.clientSecret,
+        {
+          payment_method: {
+            card: stripeState.card,
+            billing_details: { email },
+          },
+        },
+      );
+      if (result.error) {
+        throw new Error(result.error.message || "The payment could not be confirmed.");
+      }
+      if (result.paymentIntent?.status !== "succeeded") {
+        throw new Error("The payment has not completed yet.");
+      }
+      await onComplete(checkout);
+    } catch (confirmError) {
+      setError(confirmError.message || "The payment could not be confirmed.");
+    } finally {
+      setIsConfirming(false);
+    }
+  }
+
+  return (
+    <form className="form-stack" onSubmit={handleSubmit}>
+      <p>Order total: <strong>{formatCurrency(Number(checkout.amount || 0))}</strong></p>
+      <p>Charge this card directly to the company’s connected Stripe account.</p>
+      <div className="company-payment-card" ref={cardElementRef} />
+      {(error || setupError) && (
+        <p className="form-error" role="alert">{error || setupError}</p>
+      )}
+      <div className="modal-actions">
+        <button
+          className="button button-secondary"
+          disabled={isConfirming}
+          onClick={onCancel}
+          type="button"
+        >
+          Cancel
+        </button>
+        <button
+          className="button button-primary"
+          disabled={!stripeState || Boolean(setupError) || isConfirming}
+          type="submit"
+        >
+          {isConfirming ? "Processing payment…" : "Pay order"}
+        </button>
+      </div>
+    </form>
+  );
+}
 
 function getErrorMessage(error) {
   return typeof error === "string"
@@ -43,12 +172,14 @@ export default function Orders() {
   const [leads, setLeads] = useState([]);
   const [products, setProducts] = useState([]);
   const [showForm, setShowForm] = useState(false);
+  const [checkout, setCheckout] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadingOptions, setLoadingOptions] = useState(false);
   const [saving, setSaving] = useState(false);
   const [processingId, setProcessingId] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const idempotencyKeyRef = useRef(null);
 
   const loadOrders = useCallback(async () => {
     setError("");
@@ -81,6 +212,7 @@ export default function Orders() {
   }, [loadOrders, role, workspaceVersion]);
 
   async function openCreateOrder() {
+    idempotencyKeyRef.current = crypto.randomUUID();
     setShowForm(true);
     setLoadingOptions(true);
     setError("");
@@ -128,19 +260,54 @@ export default function Orders() {
     setError("");
     setNotice("");
     try {
-      await createSalesOrder({
+      const payment = await createSalesOrder({
         salesId,
         leadId,
         orderItems: [{ productId, quantity }],
-      });
+      }, idempotencyKeyRef.current);
+      idempotencyKeyRef.current = null;
       setShowForm(false);
-      setNotice("Order created.");
+      if (payment.alreadyPaid) {
+        setNotice("Order payment was already completed.");
+      } else if (payment.clientSecret && payment.stripeAccountId) {
+        setCheckout(payment);
+      } else {
+        throw new Error("The order was created but Stripe did not return payment details.");
+      }
       await loadOrders();
     } catch (createError) {
       setError(getErrorMessage(createError));
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handlePayOrder(orderId) {
+    setProcessingId(orderId);
+    setError("");
+    setNotice("");
+    try {
+      const payment = await getOrderPaymentIntent(orderId);
+      if (payment.alreadyPaid) {
+        setNotice("Order payment was already completed.");
+        await loadOrders();
+      } else if (payment.clientSecret && payment.stripeAccountId) {
+        setCheckout(payment);
+      } else {
+        throw new Error("Stripe did not return payment details for this order.");
+      }
+    } catch (paymentError) {
+      setError(getErrorMessage(paymentError));
+    } finally {
+      setProcessingId(null);
+    }
+  }
+
+  async function handleOrderPaymentComplete(completedCheckout) {
+    await confirmOrderPayment(completedCheckout.orderId);
+    setCheckout(null);
+    setNotice(`Order ${completedCheckout.orderId} was paid.`);
+    await loadOrders();
   }
 
   async function handleFulfill(orderId) {
@@ -242,13 +409,30 @@ export default function Orders() {
           <div className="empty-state" role="status">Loading orders…</div>
         ) : (
           <DataTable
-            columns={["Order", "Amount", "Status", ...(role === "WAREHOUSE" ? [""] : [])]}
+            columns={[
+              "Order",
+              "Amount",
+              "Status",
+              "Payment",
+              ...(role === "WAREHOUSE" || role === "SALES" ? [""] : []),
+            ]}
             rows={orders.map((order) => ({
               id: order.id,
               cells: [
                 <strong className="order-id">{order.id}</strong>,
                 <strong>{formatCurrency(Number(order.total || 0))}</strong>,
                 <StatusBadge status={displayStatus(order.status)} />,
+                order.payment ? (
+                  <StatusBadge
+                    status={
+                      order.payment.status === "SUCCESS"
+                        ? "Paid"
+                        : order.payment.status === "FAIL"
+                          ? "Failed"
+                          : "Unpaid"
+                    }
+                  />
+                ) : <span>—</span>,
                 ...(role === "WAREHOUSE"
                   ? [
                       String(order.status).toUpperCase() === "PLACED" ? (
@@ -271,15 +455,42 @@ export default function Orders() {
                         </button>
                       ) : <span />,
                     ]
-                  : []),
+                  : role === "SALES"
+                    ? [
+                        order.payment && order.payment.status !== "SUCCESS" ? (
+                          <button
+                            className="text-button"
+                            disabled={processingId !== null}
+                            onClick={() => handlePayOrder(order.id)}
+                            type="button"
+                          >
+                            {processingId === order.id ? "Loading…" : "Pay now"}
+                          </button>
+                        ) : <span />,
+                      ]
+                    : []),
               ],
             }))}
             emptyMessage="No orders found."
           />
         )}
       </section>
-      {showForm && (
-        <Modal onClose={() => setShowForm(false)} title="Create order">
+      {(showForm || checkout) && (
+        <Modal
+          onClose={() => {
+            setShowForm(false);
+            setCheckout(null);
+          }}
+          title={checkout ? `Pay order ${checkout.orderId}` : "Create order"}
+        >
+          {checkout ? (
+            <StripeOrderCardForm
+              checkout={checkout}
+              email={user?.email}
+              onCancel={() => setCheckout(null)}
+              onComplete={handleOrderPaymentComplete}
+            />
+          ) : (
           <form className="form-stack" onSubmit={submitOrder}>
             <label>
               Lead
@@ -343,6 +554,7 @@ export default function Orders() {
               </button>
             </div>
           </form>
+          )}
         </Modal>
       )}
     </>

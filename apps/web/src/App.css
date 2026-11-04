@@ -78,23 +78,20 @@
     color: #7c8798;
     font-size: 11px;
   }
-  .company-wallet-balance {
+  .company-stripe-balance {
     padding: 21px;
   }
-  .company-wallet-balance .eyebrow {
+  .company-stripe-balance .eyebrow {
     margin-top: 15px;
   }
-  .company-wallet-balance > strong {
+  .company-stripe-balance > strong {
     color: #273447;
     font: 700 30px Manrope, sans-serif;
   }
-  .company-wallet-balance > p:not(.eyebrow) {
+  .company-stripe-balance > p:not(.eyebrow) {
     color: #7c8798;
     font-size: 11px;
     line-height: 1.55;
-  }
-  .company-wallet-form-panel {
-    max-width: none;
   }
   .company-welcome-panel,
   .company-subscription-panel {
@@ -335,8 +332,129 @@
     color: #bd5c5c;
     font-size: 11px;
   }
+  .company-stripe-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 0.9fr);
+    gap: 16px;
+  }
+  .company-stripe-summary,
+  .company-stripe-checklist {
+    padding: 21px;
+  }
+  .company-stripe-summary-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .company-stripe-summary > .eyebrow {
+    margin: 18px 0 6px;
+  }
+  .company-stripe-summary h2,
+  .company-stripe-checklist h2 {
+    margin: 0;
+    color: #273447;
+    font: 700 17px/1.4 Manrope, sans-serif;
+  }
+  .company-stripe-description {
+    max-width: 500px;
+    color: #7c8798;
+    font-size: 12px;
+    line-height: 1.7;
+  }
+  .company-stripe-account-details {
+    display: flex;
+    gap: 36px;
+    margin: 20px 0;
+    padding-top: 16px;
+    border-top: 1px solid #f0f2f5;
+  }
+  .company-stripe-account-details div {
+    display: grid;
+    gap: 5px;
+  }
+  .company-stripe-account-details dt {
+    color: #929baa;
+    font-size: 10px;
+  }
+  .company-stripe-account-details dd {
+    margin: 0;
+    color: #344156;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .company-stripe-action {
+    margin-top: 10px;
+  }
+  .company-stripe-ready-note {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 20px 0 0;
+    color: #33865f;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .company-stripe-checklist > div {
+    padding-bottom: 15px;
+    border-bottom: 1px solid #f0f2f5;
+  }
+  .company-stripe-checklist .eyebrow {
+    margin: 0 0 5px;
+  }
+  .company-stripe-checklist ul {
+    display: grid;
+    gap: 16px;
+    margin: 17px 0;
+    padding: 0;
+    list-style: none;
+  }
+  .company-stripe-step {
+    display: grid;
+    grid-template-columns: 25px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+  }
+  .company-stripe-step-check,
+  .company-stripe-step-pending {
+    display: grid;
+    width: 25px;
+    height: 25px;
+    place-items: center;
+    border-radius: 50%;
+  }
+  .company-stripe-step-check {
+    color: #33865f;
+    background: #eaf7ef;
+  }
+  .company-stripe-step-pending {
+    color: #8993a2;
+    background: #f0f2f5;
+  }
+  .company-stripe-step > span:nth-child(2) {
+    display: grid;
+    gap: 4px;
+  }
+  .company-stripe-step strong {
+    color: #344156;
+    font-size: 11px;
+  }
+  .company-stripe-step small,
+  .company-stripe-step-status,
+  .company-stripe-footnote {
+    color: #929baa;
+    font-size: 10px;
+  }
+  .company-stripe-footnote {
+    margin: 0;
+    line-height: 1.6;
+  }
   @media (max-width: 900px) {
     .company-dashboard-grid {
+      grid-template-columns: 1fr;
+    }
+    .company-stripe-grid {
       grid-template-columns: 1fr;
     }
     .company-metrics-grid {
@@ -357,6 +475,10 @@
     .company-active-subscription,
     .company-active-copy {
       align-items: flex-start;
+    }
+    .company-stripe-summary,
+    .company-stripe-checklist {
+      padding: 17px;
     }
     .company-active-subscription {
       flex-direction: column;

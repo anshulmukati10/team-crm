@@ -1,4 +1,5 @@
 import { prisma } from "../../config/prismaClient.js";
+import stripe from "../../config/stripe.js";
 import { emitWorkspaceUpdate } from "../../config/socket.js";
 import asyncHandler from "../../middleware/asyncMiddleware.js";
 
@@ -66,6 +67,48 @@ export const getCompanyWallet = asyncHandler(async (req, res) => {
   });
 });
 
+export const getCompanyStripeBalance = asyncHandler(async (req, res) => {
+  const companyId = getCompanyId(req, res);
+  if (!companyId) return;
+
+  const connectedAccount = await prisma.stripeConnectedAccount.findUnique({
+    where: { companyId },
+    select: { stripeAccountId: true },
+  });
+
+  if (!connectedAccount) {
+    return res.status(200).json({
+      connected: false,
+      available: [],
+      pending: [],
+    });
+  }
+
+  try {
+    const balance = await stripe.balance.retrieve(
+      {},
+      { stripeAccount: connectedAccount.stripeAccountId },
+    );
+
+    return res.status(200).json({
+      connected: true,
+      available: balance.available.map(({ amount, currency }) => ({
+        amount,
+        currency,
+      })),
+      pending: balance.pending.map(({ amount, currency }) => ({
+        amount,
+        currency,
+      })),
+    });
+  } catch (error) {
+    console.error("Unable to retrieve connected Stripe balance:", error);
+    return res.status(502).json({
+      message: "Unable to retrieve the company's Stripe balance",
+    });
+  }
+});
+
 export const creditCompanyWallet = asyncHandler(async (req, res) => {
   const companyId = getCompanyId(req, res);
   if (!companyId) return;
@@ -105,6 +148,7 @@ export const getCompanyOrders = asyncHandler(async (req, res) => {
       createdAt: true,
       lead: { select: { name: true } },
       sales: { select: { name: true } },
+      payment: { select: { status: true } },
     },
     orderBy: { createdAt: "desc" },
   });

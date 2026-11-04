@@ -86,6 +86,7 @@ export default function CompanyOrders() {
               "Date",
               "Total",
               "Status",
+              "Payment",
             ]}
             emptyMessage="No orders have been placed by your company."
             rows={state.orders.map((order) => ({
@@ -97,6 +98,17 @@ export default function CompanyOrders() {
                 <span>{order.createdAt ? formatDate(order.createdAt) : "—"}</span>,
                 <strong>{formatCurrency(Number(order.total || 0))}</strong>,
                 <StatusBadge status={displayStatus(order.status)} />,
+                order.payment ? (
+                  <StatusBadge
+                    status={
+                      order.payment.status === "SUCCESS"
+                        ? "Paid"
+                        : order.payment.status === "FAIL"
+                          ? "Failed"
+                          : "Unpaid"
+                    }
+                  />
+                ) : <span>—</span>,
               ],
             }))}
           />
